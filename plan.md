@@ -97,8 +97,60 @@ pipeline.run()
 - 分支 `granularity="sample"` 时，下游是否需要"重新攒批"以保持 batch 大小稳定，还是允许下游接收变小的 batch
 
 ## 实现规划
-### 目录
-根目录：CargoDash
-1级子目录：
-modules/：用于定义各模块，包括RawDataSource、DataOutput、Judge、Processor，即有向图pipeline中的“节点”
-data_utils/：用于
+
+### 目录结构
+
+仓库根为 `CargoDash/`；Python 包根为 `cargodash/`（套娃一层，遵循主流库布局，便于发布到 PyPI 后用户写 `from cargodash import ...`）。
+
+```
+CargoDash/                       # 仓库根
+├── pyproject.toml               # 包元数据、依赖、构建配置
+├── README.md
+├── LICENSE
+├── .gitignore
+├── plan.md
+├── cargodash/                   # Python 包根
+│   ├── __init__.py              # 公开 API：从子模块重新导出 RawDataSource / DataOutput /
+│   │                            #   Processor / Judge / Vote / Pipeline
+│   ├── core/                    # 框架基础抽象（与具体模块解耦）
+│   │   ├── __init__.py
+│   │   ├── module.py            # Module 基类、Port（含 on_true / on_false）、>> 操作符
+│   │   └── pipeline.py          # Pipeline：从源遍历收集 DAG、构图期 schema 校验
+│   ├── modules/                 # 有向图中的“节点”模块
+│   │   ├── __init__.py
+│   │   ├── source.py            # RawDataSource
+│   │   ├── output.py            # DataOutput
+│   │   ├── processor.py         # Processor
+│   │   └── judge.py             # Judge（含 sample / batch 两种 granularity）
+│   ├── data_utils/              # 数据基础设施
+│   │   ├── __init__.py
+│   │   ├── batch.py             # Batch
+│   │   ├── schema.py            # Schema 定义与一致性校验
+│   │   └── queue.py             # 节点间有界流式队列（streaming + backpressure）
+│   ├── voting/                  # Judge 的判定辅助（不是图节点，故独立于 modules/）
+│   │   ├── __init__.py
+│   │   └── vote.py              # Vote
+│   ├── runtime/                 # 执行引擎
+│   │   ├── __init__.py
+│   │   ├── executor.py          # DAG 遍历、节点调度、batch 在节点间的传递
+│   │   └── workers.py           # intra_batch_workers 的实现（线程池，IO 密集场景为主）
+│   └── models/                  # LLM 客户端抽象（Phase 1 仅 mock，真实客户端推迟）
+│       ├── __init__.py
+│       ├── base.py              # 模型统一接口
+│       └── mock.py              # 测试用 mock 模型
+├── tests/
+│   ├── unit/                    # 各模块单测（Schema 校验、Judge 拆分、Vote 投票等）
+│   └── integration/             # 端到端流水线集成测试（含分支汇合、嵌套分支）
+└── examples/
+    └── basic_pipeline.py        # 端到端示例（对应 plan.md §3 的代码片段）
+```
+
+### 模块依赖方向（从底到顶）
+1. `data_utils/`：无内部依赖
+2. `voting/`、`models/`：依赖 `data_utils/`
+3. `core/`：依赖 `data_utils/`
+4. `modules/`：依赖 `core/` + `data_utils/`（`judge.py` 额外依赖 `voting/`）
+5. `runtime/`：依赖 `core/` + `data_utils/`
+6. `cargodash/__init__.py`：聚合上述子包，暴露公开 API
+
+构图（`>>`、`Pipeline(source)`）只用到 `core/` + `modules/`；执行（`pipeline.run()`）才用到 `runtime/`。这样保证"构图"与"执行"在代码组织上也解耦，便于将来替换执行引擎（如改用 asyncio 或多进程）而不动构图层。
