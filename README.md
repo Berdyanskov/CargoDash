@@ -4,29 +4,42 @@
 
 # CargoDash
 
-> ⚠️ **当前为 Preview 版本（v0.1.0）**：API 与内部实现仍可能在没有兼容性保证的情况下变动，欢迎试用、提 issue，但暂不建议用于生产环境。
+> ⚠️ **当前为 Preview 版本（v0.2.0）**：API 与内部实现仍可能在没有兼容性保证的情况下变动，欢迎试用、提 issue，但暂不建议用于生产环境。
 
 CargoDash 是一个用于搭建**简单、模块化、多功能、高效**的大模型训练数据合成 / 增强流水线的 Python 库。核心理念：任何数据处理流水线都可以由**顺序**与**分支**两类原语嵌套组合而成。
+
+## v0.2 新增
+
+- **`LLMCall` —— 调模型即一行**：仅需 `prompt + model + api_key`，即可得到一个可塞进 `Processor` 的节点函数；`base_url` 切到 OpenAI 兼容网关（DeepSeek / Moonshot / 智谱 / vLLM / SGLang / Ollama）皆可
+- **`ChatClient` 协议层**：抽出 `ChatClient` / `OpenAICompatChatClient` / `MockChatClient`，后续接原生 vLLM、SGLang 协议时只需新增子类
+- **`Processor` 简化为单一类**：合并旧 `MapProcessor`，新增 `mode="sample"`（默认）/ `mode="batch"` 两种模式；调 LLM 走 `mode="sample" + intra_batch_workers=N` 并发
+- **执行容错修复**：任一节点抛异常时，executor 保证 SENTINEL 推到全部下游 + 进入 drain 模式排空入口队列，不再级联死锁；错误最终原样上抛
 
 ## 特性
 
 - **三类核心原语**：`Processor`（顺序处理）、`Judge`（分支判定，支持 sample / batch 两种粒度）、`Vote`（多模型投票，可作为 Judge 的判定函数）
+- **`LLMCall` 一行接入大模型**：内置 OpenAI 兼容 client，覆盖 OpenAI / DeepSeek / 智谱 / Moonshot / 通义 / vLLM / SGLang / Ollama 等
 - **以 batch 为流转单元**：模块之间 streaming 传递 batch，`batch_size = 1` 时自然退化为逐条
 - **DAG 用 Python 操作符表达**：`>>` 连接节点，`Judge.on_true / on_false` 命名端口表达分支，汇合点通过对象身份自动识别
 - **强类型 Schema**：基于 `pyarrow.Schema`，构图阶段静态校验，分支汇合点 schema 一致性检查同样在构图期完成
-- **batch 内并行**：`intra_batch_workers` 一行参数控制 batch 内多样本并发（典型场景：并发调用 LLM）
+- **batch 内并行 + 节点间 streaming + 背压**：`intra_batch_workers` 控制 batch 内多样本并发（典型场景：并发调 LLM），节点间有界队列做 streaming 与 backpressure
 
 ## 安装
 
 要求 Python ≥ 3.10。
 
 ```bash
+# Gitee（国内推荐）
 git clone https://gitee.com/the-call-of-volgograd/cargo-dash_preview.git
-cd CargoDash
+
+# 或 GitHub
+git clone https://github.com/Berdyanskov/CargoDash_preview.git
+
+cd cargo-dash_preview      # 或 CargoDash_preview
 pip install -e .
 ```
 
-依赖仅 `pyarrow>=15.0`。
+核心依赖仅 `pyarrow>=15.0`。如需用 `LLMCall` 调真实 OpenAI 兼容服务，再装 `pip install openai`（`MockChatClient` 不需要）。
 
 ## 快速上手
 
@@ -105,18 +118,24 @@ cargodash/
 ├── data_utils/  # Batch、Schema（pyarrow 后端）、节点间队列
 ├── modules/     # RawDataSource / DataOutput / Processor / Judge
 ├── voting/      # Vote
-└── runtime/     # 执行引擎（threading + bounded queue）
+├── models/      # ChatClient 抽象 + OpenAI 兼容 client + LLMCall
+└── runtime/     # 执行引擎（threading + bounded queue + 节点失败容错）
 ```
 
 ## Roadmap
 
-Preview 阶段已完成上述 Phase 1 最小骨架；后续计划：
+v0.2 已完成：核心 DAG / Schema / streaming + backpressure / `LLMCall` + OpenAI 兼容 client / 节点失败容错。后续按优先级：
 
-- `DataOutput` 的 `preserve_order=True`（基于源端 ID 与重排缓冲）
-- 真实 LLM 客户端集成（OpenAI / vLLM / 本地推理）
-- 跨 batch 并发、多进程 / 分布式执行
-- 失败重试、限流、断点续跑、可观测性（指标 / 追踪）
+- 内置开箱即用的节点库（text 清洗 / 去重 / 质量分 / SFT 对话合成）
+- 原生 vLLM、SGLang 协议（绕开 OpenAI SDK 走更高效的本地路径）
+- 失败重试、限流、断点续跑；中间产物版本化（参考 DataFlow `storage.step()`）
+- 跨 batch 并发、多进程 / 分布式（threading → multiproc → Ray）
+- I/O 格式扩展：parquet / csv / HuggingFace datasets
+- `DataOutput` 的 `preserve_order=True`
 - `Loop` 作为分支回跳的语法糖
+- CLI、可观测性（结构化日志 / 指标 / 追踪）
+
+详见 [`plan.md`](plan.md) §6。
 
 
 ## 许可证

@@ -7,3 +7,4 @@ build/
 dist/
 examples/_demo_*.jsonl
 plan.md
+advertisement.md
