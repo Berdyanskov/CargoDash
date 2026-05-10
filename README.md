@@ -135,7 +135,6 @@ v0.2 已完成：核心 DAG / Schema / streaming + backpressure / `LLMCall` + Op
 - `Loop` 作为分支回跳的语法糖
 - CLI、可观测性（结构化日志 / 指标 / 追踪）
 
-详见 [`plan.md`](plan.md) §6。
 
 
 ## 许可证
