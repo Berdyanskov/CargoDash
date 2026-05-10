@@ -35,7 +35,7 @@ pip install -e .
 ```python
 from cargodash import (
     Schema, RawDataSource, DataOutput,
-    MapProcessor, Judge, Vote, Pipeline,
+    Processor, Judge, Vote, LLMCall, Pipeline,
 )
 
 schema = Schema.of(id=int, text=str, quality=float)
@@ -43,11 +43,24 @@ schema = Schema.of(id=int, text=str, quality=float)
 source = RawDataSource("in.jsonl", schema=schema, batch_size=32)
 target = DataOutput("out.jsonl", schema=schema)
 
-clean   = MapProcessor(lambda r: {**r, "text": r["text"].strip()},
-                       input_schema=schema, output_schema=schema)
-augment = MapProcessor(lambda r: {**r, "text": r["text"] + " [AUG]"},
-                       input_schema=schema, output_schema=schema,
-                       intra_batch_workers=8)
+clean = Processor(lambda r: {**r, "text": r["text"].strip()},
+                  input_schema=schema, output_schema=schema)
+
+# LLM 调用节点：只需 prompt + 模型名 + api_key，输出会写到 output_field 指定的列。
+# 框架在 batch 内按 intra_batch_workers 并发调用，自动覆盖 OpenAI / 国内
+# OpenAI 兼容网关（设 base_url）/ 本地 vLLM / SGLang。
+augment = Processor(
+    LLMCall(
+        prompt="改写这句话，使其更生动：{text}",
+        model="gpt-4.1-mini",
+        api_key="sk-...",
+        output_field="text",
+        # base_url="https://api.deepseek.com/v1",   # 国内网关示例
+        # temperature=0.7, max_tokens=256,           # 任意 gen kwargs 自动转发
+    ),
+    input_schema=schema, output_schema=schema,
+    intra_batch_workers=8,
+)
 
 quality_vote = Vote(
     model_list=[model_a, model_b, model_c],   # 任意 callable: dict -> bool
@@ -63,7 +76,7 @@ source >> clean >> judge_quality
 judge_quality.on_true  >> judge_lang
 judge_lang.on_true     >> augment >> target
 judge_lang.on_false    >> target                  # 与上行汇合到同一 target
-judge_quality.on_false >> MapProcessor(log_drop, ...)
+judge_quality.on_false >> Processor(log_drop, ...)
 
 Pipeline(source).run()
 ```
@@ -75,8 +88,10 @@ Pipeline(source).run()
 1. **声明 Schema**：`Schema.of(...)`，可传 python 类型或 `pyarrow.DataType`
 2. **构造端点**：`RawDataSource`（jsonl 输入）、`DataOutput`（jsonl 输出）
 3. **构造处理节点**：
-   - `Processor(fn)`：`fn` 接收一个 `Batch`，yield 0~N 个 `Batch`，适合需要在 batch 维度做事的场景
-   - `MapProcessor(fn, intra_batch_workers=N)`：`fn` 接收单条 row dict，框架自动在 batch 内并发应用
+   - `Processor(fn, mode="sample" | "batch")`：顺序处理。
+     - `mode="sample"`（默认）：`fn` 接收单条 row dict，返回 dict / dict 列表 / None；框架在 batch 内 per-sample 调用并按 `intra_batch_workers` 并发
+     - `mode="batch"`：`fn` 接收整个 `Batch`，适合 batch 维度操作（去重、排序）
+   - `LLMCall(prompt, model, api_key, output_field=...)`：单轮 LLM 调用，作为 `Processor` 的 `fn` 即得到一个调模型节点；`base_url` 可指向任意 OpenAI 兼容服务（DeepSeek / Moonshot / 智谱 / vLLM / SGLang ...），无 OpenAI SDK 时换 `MockChatClient` 即可离线 dry-run
    - `Judge(predicate, granularity="sample" | "batch")`：分支节点
    - `Vote(model_list, true_num)`：多模型投票，可作为 `Judge` 的 `predicate`
 4. **用 `>>` 与命名端口连边**：得到一张 DAG
