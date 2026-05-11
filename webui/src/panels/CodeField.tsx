@@ -11,21 +11,23 @@ interface Props {
 export function CodeField({ label, value, onChange, height = 160 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Block keyboard events from bubbling up to ancestor listeners (e.g. React
-  // Flow's document-level keyboard handlers). Use the native capture phase
-  // because React's onKeyDownCapture still fires after the browser has
-  // dispatched the event to document-level listeners.
+  // Block keyboard events from bubbling up past Monaco to ancestor
+  // listeners (e.g. React Flow's document-level keyboard handlers).
+  // IMPORTANT: bubble phase, not capture. Capture-phase stopPropagation
+  // would prevent Monaco itself from seeing keys like Tab (browser default
+  // shifts focus). We let Monaco handle the key first, then stop the
+  // bubble so document-level listeners don't see it.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const stop = (e: KeyboardEvent) => e.stopPropagation();
-    el.addEventListener("keydown", stop, true);
-    el.addEventListener("keyup", stop, true);
-    el.addEventListener("keypress", stop, true);
+    el.addEventListener("keydown", stop, false);
+    el.addEventListener("keyup", stop, false);
+    el.addEventListener("keypress", stop, false);
     return () => {
-      el.removeEventListener("keydown", stop, true);
-      el.removeEventListener("keyup", stop, true);
-      el.removeEventListener("keypress", stop, true);
+      el.removeEventListener("keydown", stop, false);
+      el.removeEventListener("keyup", stop, false);
+      el.removeEventListener("keypress", stop, false);
     };
   }, []);
 
