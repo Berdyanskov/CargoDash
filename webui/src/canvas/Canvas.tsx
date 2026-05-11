@@ -64,6 +64,9 @@ export function Canvas() {
           selectNode(nodes[0]?.id ?? null)
         }
         deleteKeyCode={["Delete", "Backspace"]}
+        // React Flow defaults Space to "pan-activation". Disable it so the
+        // Space key is never intercepted at the canvas level.
+        panActivationKeyCode={null}
         fitView
       >
         <Background gap={16} />
