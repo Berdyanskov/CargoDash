@@ -7,7 +7,8 @@ const descriptions: Record<NodeKind, string> = {
   Processor: "user-defined fn (sample/batch mode)",
   Judge: "split on_true / on_false",
   Vote: "multi-model vote (referenced by Judge)",
-  LLMCall: "single-turn OpenAI-compatible call",
+  LLMCall: "single-turn LLM call",
+  ModelSpec: "model deployment (remote / local HF / local vLLM)",
 };
 
 export function NodePalette() {

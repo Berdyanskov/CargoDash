@@ -3,14 +3,18 @@ from .core import Module, Port, Pipeline
 from .data_utils import Schema, Batch
 from .modules import RawDataSource, DataOutput, Processor, Judge
 from .voting import Vote
-from .models import ChatClient, OpenAICompatChatClient, MockChatClient, LLMCall
+from .models import (
+    ChatClient, OpenAICompatChatClient, MockChatClient,
+    LocalHFChatClient, LocalVLLMChatClient, LLMCall,
+)
 
 __all__ = [
     "Module", "Port", "Pipeline",
     "Schema", "Batch",
     "RawDataSource", "DataOutput", "Processor", "Judge",
     "Vote",
-    "ChatClient", "OpenAICompatChatClient", "MockChatClient", "LLMCall",
+    "ChatClient", "OpenAICompatChatClient", "MockChatClient",
+    "LocalHFChatClient", "LocalVLLMChatClient", "LLMCall",
 ]
 
 __version__ = "0.1.0"

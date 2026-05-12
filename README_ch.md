@@ -4,9 +4,14 @@
 
 # CargoDash
 
-> ⚠️ **当前为 Preview 版本（v0.2.1）**：API 与内部实现仍可能在没有兼容性保证的情况下变动，欢迎试用、提 issue，但暂不建议用于生产环境。
+> ⚠️ **当前为 Preview 版本（v0.2.2）**：API 与内部实现仍可能在没有兼容性保证的情况下变动，欢迎试用、提 issue，但暂不建议用于生产环境。
 
 CargoDash 是一个用于搭建**简单、模块化、多功能、高效**的大模型训练数据合成 / 增强流水线的 Python 库。核心理念：任何数据处理流水线都可以由**顺序**与**分支**两类原语嵌套组合而成。
+
+## v0.2.2 新增
+
+- **本地模型部署**：除了原有的远程 API 调用，现在可通过 `LocalHFChatClient`（进程内 `transformers`）或 `LocalVLLMChatClient`（CargoDash 拉起 `vllm serve` 子进程、退出时自动回收）跑本地模型。Pipeline 在执行器启动前统一 `open()` 所有 client，多个节点引用同一 client 时框架按对象身份去重，永远只加载一次，避免重复加载把显存撑爆。详见 [模型部署](#模型部署)。
+- **WebUI：`ModelSpec` 节点**——一类悬浮于 DAG 之外的节点（类比 `Vote`），声明一次模型，`LLMCall` 通过下拉框引用；导出时 codegen 生成顶层 client 单例变量，天然保证"一次加载，多处共用"。
 
 ## v0.2.1 新增
 
@@ -23,6 +28,7 @@ CargoDash 是一个用于搭建**简单、模块化、多功能、高效**的大
 
 - **三类核心原语**：`Processor`（顺序处理）、`Judge`（分支判定，支持 sample / batch 两种粒度）、`Vote`（多模型投票，可作为 Judge 的判定函数）
 - **`LLMCall` 一行接入大模型**：内置 OpenAI 兼容 client，覆盖 OpenAI / DeepSeek / 智谱 / Moonshot / 通义 / vLLM / SGLang / Ollama 等
+- **三种部署方式同一套 API**：远程 OpenAI 兼容服务（`OpenAICompatChatClient`）、进程内 HF（`LocalHFChatClient`）、CargoDash 托管的 vLLM 子进程（`LocalVLLMChatClient`）——一次声明，全 DAG 共用
 - **以 batch 为流转单元**：模块之间 streaming 传递 batch，`batch_size = 1` 时自然退化为逐条
 - **DAG 用 Python 操作符表达**：`>>` 连接节点，`Judge.on_true / on_false` 命名端口表达分支，汇合点通过对象身份自动识别
 - **强类型 Schema**：基于 `pyarrow.Schema`，构图阶段静态校验，分支汇合点 schema 一致性检查同样在构图期完成
@@ -102,6 +108,42 @@ Pipeline(source).run()
 
 完整可运行示例见 [`examples/basic_pipeline.py`](examples/basic_pipeline.py)。
 
+## 模型部署
+
+三种 `ChatClient` 实现都遵循同一份 `chat(messages, **kwargs) -> str` 协议，`LLMCall(client=...)` 任选其一。`Pipeline.run()` 在执行器启动前对所有 client 调 `open()`（任何失败——OOM、未装 vLLM、端口冲突——都会立刻退出），并在 `finally` 中调 `close()`（保证 vLLM 子进程总能被正确回收）：
+
+```python
+from cargodash import (
+    OpenAICompatChatClient, LocalHFChatClient, LocalVLLMChatClient,
+)
+
+# 1) 远程 OpenAI 兼容：OpenAI / DeepSeek / Moonshot / 智谱 / 已起好的 vLLM、SGLang、Ollama 等
+remote = OpenAICompatChatClient(model="gpt-4.1-mini", api_key="sk-...")
+
+# 2) 进程内 HF transformers：适合小模型 / 单卡调试
+hf = LocalHFChatClient("Qwen/Qwen2.5-1.5B-Instruct",
+                       device="cuda", dtype="bfloat16")
+
+# 3) CargoDash 托管的 `vllm serve` 子进程——任何稍大模型推荐走这条路径。
+#    open() 起进程并等 /v1/models 探活；close() 优雅终止。
+vllm = LocalVLLMChatClient(
+    "/share/models/Qwen3.5-397B-A17B",
+    tensor_parallel_size=8,
+    gpu_memory_utilization=0.9,
+    dtype="bfloat16",
+)
+```
+
+按需安装对应 extras：
+
+```bash
+pip install cargodash[openai]      # OpenAICompatChatClient
+pip install cargodash[local-hf]    # LocalHFChatClient
+pip install cargodash[local-vllm]  # LocalVLLMChatClient
+```
+
+两个 `LLMCall` 节点引用同一个 client 对象时框架按对象身份去重——大模型权重不会被加载两次。完整 vLLM 示例见 [`examples/vllm_pipeline.py`](examples/vllm_pipeline.py)。
+
 ## WebUI（可视化构图）
 
 如果不想写代码，CargoDash 在 v0.2.1 起提供一套基于浏览器的可视化构图工具：拖拽节点、连线、在右侧面板里填参数 / 写函数，一键导出 `pipeline.py` 即可用 `python pipeline.py` 跑起来。
@@ -110,7 +152,7 @@ Pipeline(source).run()
   <img src="assets/images/webui1.png" alt="CargoDash WebUI" width="900">
 </p>
 
-**支持的节点**：`RawDataSource` / `DataOutput` / `Processor` / `Judge` / `Vote` / `LLMCall`，与 Python API 一一对应。`Judge` 自带 `on_true` / `on_false` 两个输出端口；`Vote` 不连边，由 `Judge` 在属性面板里引用并在导出时自动内联到 `Judge(Vote(...), ...)`。
+**支持的节点**：`RawDataSource` / `DataOutput` / `Processor` / `Judge` / `Vote` / `LLMCall` / `ModelSpec`，与 Python API 一一对应。`Judge` 自带 `on_true` / `on_false` 两个输出端口；`Vote` 与 `ModelSpec` 都不连边——`Vote` 由 `Judge` 在属性面板里引用并在导出时内联到 `Judge(Vote(...), ...)`；`ModelSpec`（kind ∈ remote / local_hf / local_vllm）由 `LLMCall` 在 "client source" 下拉里引用，导出时作为顶层 client 单例变量发射，保证多处共用同一份大模型权重只加载一次。
 
 **用户自定义函数**：`Processor.fn` / `Judge.predicate(code)` / `Vote.model_list[*]` 直接在节点属性面板的 Monaco 编辑器里写 Python，导出时作为顶级 `def` 块前置到生成的 `.py` 中；`LLMCall` 则全部用结构化表单填写。
 
@@ -157,12 +199,13 @@ CargoDash/
 ## Roadmap
 
 v0.2 已完成：核心 DAG / Schema / streaming + backpressure / `LLMCall` + OpenAI 兼容 client / 节点失败容错。  
-v0.2.1 已完成：WebUI 可视化构图 + 单向 codegen 导出 `pipeline.py`。
+v0.2.1 已完成：WebUI 可视化构图 + 单向 codegen 导出 `pipeline.py`。  
+v0.2.2 已完成：本地模型部署（`LocalHFChatClient` + `LocalVLLMChatClient`）、`ChatClient.open()` / `close()` 生命周期、WebUI `ModelSpec` 悬浮节点。
 
 后续按优先级：
 
 - 内置开箱即用的节点库（text 清洗 / 去重 / 质量分 / SFT 对话合成）
-- 原生 vLLM、SGLang 协议（绕开 OpenAI SDK 走更高效的本地路径）
+- 原生 SGLang 协议（当前 vLLM 走的是 OpenAI 兼容子进程，SGLang 以及 in-process vLLM Python API 选项仍待加）
 - 失败重试、限流、断点续跑；中间产物版本化（参考 DataFlow `storage.step()`）
 - 跨 batch 并发、多进程 / 分布式（threading → multiproc → Ray）
 - I/O 格式扩展：parquet / csv / HuggingFace datasets

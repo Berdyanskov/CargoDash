@@ -5,6 +5,7 @@ import { ProcessorNode } from "./ProcessorNode";
 import { JudgeNode } from "./JudgeNode";
 import { VoteNode } from "./VoteNode";
 import { LLMCallNode } from "./LLMCallNode";
+import { ModelSpecNode } from "./ModelSpecNode";
 import type { NodeKind } from "../types/graph";
 
 export const nodeTypes: NodeTypes = {
@@ -14,6 +15,7 @@ export const nodeTypes: NodeTypes = {
   Judge: JudgeNode,
   Vote: VoteNode,
   LLMCall: LLMCallNode,
+  ModelSpec: ModelSpecNode,
 };
 
 export const nodeKinds: NodeKind[] = [
@@ -23,6 +25,7 @@ export const nodeKinds: NodeKind[] = [
   "Judge",
   "Vote",
   "LLMCall",
+  "ModelSpec",
 ];
 
 export const nodeAccent: Record<NodeKind, string> = {
@@ -32,4 +35,5 @@ export const nodeAccent: Record<NodeKind, string> = {
   Judge: "bg-amber-600",
   Vote: "bg-violet-600",
   LLMCall: "bg-indigo-600",
+  ModelSpec: "bg-fuchsia-600",
 };

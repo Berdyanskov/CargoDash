@@ -22,7 +22,21 @@ class ChatClient(ABC):
     Concrete implementations must be **thread-safe**: the executor will
     call ``chat`` concurrently from multiple worker threads when a
     Processor sets ``intra_batch_workers > 1``.
+
+    Lifecycle: ``Pipeline.run()`` calls ``open()`` on every client used
+    by the graph before any executor thread starts, and ``close()`` after
+    the executor finishes (in a ``finally``). Clients that allocate heavy
+    resources (loading a model, spawning a vLLM subprocess) should do it
+    in ``open()`` so a failure surfaces *before* the pipeline starts —
+    not in the middle of a run. Defaults are no-ops; cheap network clients
+    do not need to override.
     """
+
+    def open(self) -> None:  # noqa: A003 - mirrors file-like API
+        pass
+
+    def close(self) -> None:
+        pass
 
     @abstractmethod
     def chat(self, messages: Messages, **gen_kwargs: Any) -> str:

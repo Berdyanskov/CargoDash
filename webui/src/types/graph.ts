@@ -15,7 +15,20 @@ export type NodeKind =
   | "Processor"
   | "Judge"
   | "Vote"
-  | "LLMCall";
+  | "LLMCall"
+  | "ModelSpec";
+
+/** ModelSpec is a "floating" node (like Vote) referenced by LLMCall, not
+ * connected via DAG edges. Three deployment kinds:
+ *   - remote: OpenAI-compatible HTTP endpoint (covers OpenAI, DeepSeek,
+ *     externally-running vLLM/SGLang/Ollama, etc.).
+ *   - local_hf: in-process `transformers` model. Small models / debugging.
+ *   - local_vllm: CargoDash spawns `vllm serve` as a subprocess on open()
+ *     and tears it down on close(). For big models that need real throughput.
+ *
+ * The codegen emits one top-level singleton per ModelSpec, so two LLMCall
+ * nodes referencing the same spec share one loaded model. */
+export type ModelKind = "remote" | "local_hf" | "local_vllm";
 
 interface NodeBase {
   kind: NodeKind;
@@ -77,18 +90,61 @@ export interface VoteData extends NodeBase {
   trueNum: number;
 }
 
+/** LLMCall client config is either inline (the v0.2.1 form) or a
+ * reference to a ModelSpec node. Inline mode keeps the simple
+ * "OpenAI-compatible remote call" path one-stop; modelRef mode is what
+ * you use for local_hf / local_vllm or to share one client across
+ * many LLMCalls. */
+export type LLMClientConfig =
+  | {
+      mode: "inline";
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+    }
+  | { mode: "modelRef"; modelNodeId: string };
+
 export interface LLMCallData extends NodeBase {
   kind: "LLMCall";
   prompt: string;
-  model: string;
-  apiKey: string;
   outputField: string;
-  baseUrl: string;
+  client: LLMClientConfig;
   /** Free-form JSON object string forwarded as gen kwargs. */
   genKwargs: string;
   intraBatchWorkers: number;
   inputSchema: SchemaField[];
   outputSchema: SchemaField[];
+}
+
+export interface ModelSpecData extends NodeBase {
+  kind: "ModelSpec";
+  modelKind: ModelKind;
+  /** Repo id for remote/HF, local path for HF/vLLM, model name for remote. */
+  model: string;
+
+  // -- remote -------------------------------------------------------------
+  apiKey: string;
+  baseUrl: string;
+
+  // -- local_hf + local_vllm ---------------------------------------------
+  cacheDir: string;
+  trustRemoteCode: boolean;
+  /** "" lets the backend pick; otherwise "float16" / "bfloat16" / "float32". */
+  dtype: string;
+
+  // -- local_vllm only ----------------------------------------------------
+  servedModelName: string;
+  tensorParallelSize: number;
+  gpuMemoryUtilization: number;
+  maxModelLen: number; // 0 = unset
+  /** Extra `vllm serve` flags joined by space — escape hatch. */
+  extraArgs: string;
+  startupTimeout: number;
+  logPath: string;
+
+  // -- local_hf only ------------------------------------------------------
+  device: string;
+  maxNewTokens: number;
 }
 
 export type AnyNodeData =
@@ -97,7 +153,8 @@ export type AnyNodeData =
   | ProcessorData
   | JudgeData
   | VoteData
-  | LLMCallData;
+  | LLMCallData
+  | ModelSpecData;
 
 /** Custom edge data so we know which named port the edge leaves through. */
 export type EdgePort = "default" | "true" | "false";

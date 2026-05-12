@@ -11,5 +11,10 @@ dependencies = [
     "pyarrow>=15.0",
 ]
 
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+local-hf = ["transformers>=4.40", "torch>=2.1"]
+local-vllm = ["vllm>=0.5", "openai>=1.0"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["cargodash"]

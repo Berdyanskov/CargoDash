@@ -4,6 +4,8 @@ import type {
   DataOutputData,
   JudgeData,
   LLMCallData,
+  ModelKind,
+  ModelSpecData,
   ProcessorData,
   RawDataSourceData,
   VoteData,
@@ -74,6 +76,9 @@ export function PropertiesPanel() {
       {data.kind === "Judge" && <JudgeForm data={data} onPatch={patch} />}
       {data.kind === "Vote" && <VoteForm data={data} onPatch={patch} />}
       {data.kind === "LLMCall" && <LLMCallForm data={data} onPatch={patch} />}
+      {data.kind === "ModelSpec" && (
+        <ModelSpecForm data={data} onPatch={patch} />
+      )}
     </div>
   );
 }
@@ -373,28 +378,91 @@ function LLMCallForm({
   data: LLMCallData;
   onPatch: Patcher;
 }) {
+  const modelSpecs = useGraphStore((s) =>
+    s.nodes.filter((n) => n.data.kind === "ModelSpec"),
+  );
   return (
     <>
-      <Field label="model">
-        <TextInput
-          value={data.model}
-          onChange={(v) => onPatch({ model: v } as Partial<AnyNodeData>)}
+      <Field label="client source">
+        <Select
+          value={data.client.mode}
+          options={["inline", "modelRef"]}
+          onChange={(mode) => {
+            if (mode === "inline") {
+              onPatch({
+                client: {
+                  mode: "inline",
+                  model: "gpt-4.1-mini",
+                  apiKey: "",
+                  baseUrl: "",
+                },
+              } as Partial<AnyNodeData>);
+            } else {
+              onPatch({
+                client: {
+                  mode: "modelRef",
+                  modelNodeId: modelSpecs[0]?.id ?? "",
+                },
+              } as Partial<AnyNodeData>);
+            }
+          }}
         />
       </Field>
-      <Field label="api_key">
-        <TextInput
-          value={data.apiKey}
-          onChange={(v) => onPatch({ apiKey: v } as Partial<AnyNodeData>)}
-          placeholder="sk-..."
-        />
-      </Field>
-      <Field label="base_url (optional)">
-        <TextInput
-          value={data.baseUrl}
-          onChange={(v) => onPatch({ baseUrl: v } as Partial<AnyNodeData>)}
-          placeholder="https://api.deepseek.com/v1"
-        />
-      </Field>
+      {data.client.mode === "inline" ? (
+        <>
+          <Field label="model">
+            <TextInput
+              value={data.client.model}
+              onChange={(v) =>
+                onPatch({
+                  client: { ...data.client, model: v },
+                } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+          <Field label="api_key">
+            <TextInput
+              value={data.client.apiKey}
+              onChange={(v) =>
+                onPatch({
+                  client: { ...data.client, apiKey: v },
+                } as Partial<AnyNodeData>)
+              }
+              placeholder="sk-..."
+            />
+          </Field>
+          <Field label="base_url (optional)">
+            <TextInput
+              value={data.client.baseUrl}
+              onChange={(v) =>
+                onPatch({
+                  client: { ...data.client, baseUrl: v },
+                } as Partial<AnyNodeData>)
+              }
+              placeholder="https://api.deepseek.com/v1"
+            />
+          </Field>
+        </>
+      ) : (
+        <Field label="model spec">
+          <select
+            value={data.client.modelNodeId}
+            onChange={(e) =>
+              onPatch({
+                client: { mode: "modelRef", modelNodeId: e.target.value },
+              } as Partial<AnyNodeData>)
+            }
+            className="w-full text-xs px-2 py-1 border rounded"
+          >
+            <option value="">— pick a ModelSpec node —</option>
+            {modelSpecs.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.data.varName} ({(n.data as ModelSpecData).modelKind})
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="output_field">
         <TextInput
           value={data.outputField}
@@ -440,6 +508,177 @@ function LLMCallForm({
           onPatch({ outputSchema: v } as Partial<AnyNodeData>)
         }
       />
+    </>
+  );
+}
+
+function ModelSpecForm({
+  data,
+  onPatch,
+}: {
+  data: ModelSpecData;
+  onPatch: Patcher;
+}) {
+  const setKind = (k: ModelKind) =>
+    onPatch({ modelKind: k } as Partial<AnyNodeData>);
+
+  return (
+    <>
+      <Field label="kind">
+        <Select
+          value={data.modelKind}
+          options={["remote", "local_hf", "local_vllm"]}
+          onChange={(v) => setKind(v as ModelKind)}
+        />
+      </Field>
+      <Field label="model (HF repo id, local path, or remote model name)">
+        <TextInput
+          value={data.model}
+          onChange={(v) => onPatch({ model: v } as Partial<AnyNodeData>)}
+          placeholder={
+            data.modelKind === "remote"
+              ? "gpt-4.1-mini"
+              : "Qwen/Qwen2.5-7B-Instruct or /share/models/..."
+          }
+        />
+      </Field>
+
+      {data.modelKind === "remote" && (
+        <>
+          <Field label="api_key">
+            <TextInput
+              value={data.apiKey}
+              onChange={(v) => onPatch({ apiKey: v } as Partial<AnyNodeData>)}
+              placeholder="sk-..."
+            />
+          </Field>
+          <Field label="base_url (optional)">
+            <TextInput
+              value={data.baseUrl}
+              onChange={(v) => onPatch({ baseUrl: v } as Partial<AnyNodeData>)}
+              placeholder="https://api.deepseek.com/v1"
+            />
+          </Field>
+        </>
+      )}
+
+      {(data.modelKind === "local_hf" || data.modelKind === "local_vllm") && (
+        <>
+          <Field label="cache_dir (optional, for HF downloads)">
+            <TextInput
+              value={data.cacheDir}
+              onChange={(v) =>
+                onPatch({ cacheDir: v } as Partial<AnyNodeData>)
+              }
+              placeholder="/path/to/hf_cache"
+            />
+          </Field>
+          <Field label="dtype">
+            <Select
+              value={data.dtype || ""}
+              options={["", "float16", "bfloat16", "float32"]}
+              onChange={(v) => onPatch({ dtype: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Checkbox
+            label="trust_remote_code"
+            value={data.trustRemoteCode}
+            onChange={(v) =>
+              onPatch({ trustRemoteCode: v } as Partial<AnyNodeData>)
+            }
+          />
+        </>
+      )}
+
+      {data.modelKind === "local_hf" && (
+        <>
+          <Field label="device">
+            <TextInput
+              value={data.device}
+              onChange={(v) => onPatch({ device: v } as Partial<AnyNodeData>)}
+              placeholder="cuda / cpu / cuda:0"
+            />
+          </Field>
+          <Field label="max_new_tokens (default)">
+            <NumberInput
+              value={data.maxNewTokens}
+              min={1}
+              onChange={(v) =>
+                onPatch({ maxNewTokens: v } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+        </>
+      )}
+
+      {data.modelKind === "local_vllm" && (
+        <>
+          <Field label="served_model_name (optional)">
+            <TextInput
+              value={data.servedModelName}
+              onChange={(v) =>
+                onPatch({ servedModelName: v } as Partial<AnyNodeData>)
+              }
+              placeholder="(defaults to basename of model)"
+            />
+          </Field>
+          <Field label="tensor_parallel_size">
+            <NumberInput
+              value={data.tensorParallelSize}
+              min={1}
+              onChange={(v) =>
+                onPatch({ tensorParallelSize: v } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+          <Field label="gpu_memory_utilization">
+            <NumberInput
+              value={data.gpuMemoryUtilization}
+              min={0}
+              step={0.05}
+              onChange={(v) =>
+                onPatch({ gpuMemoryUtilization: v } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+          <Field label="max_model_len (0 = unset)">
+            <NumberInput
+              value={data.maxModelLen}
+              min={0}
+              onChange={(v) =>
+                onPatch({ maxModelLen: v } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+          <Field label="startup_timeout (s)">
+            <NumberInput
+              value={data.startupTimeout}
+              min={1}
+              onChange={(v) =>
+                onPatch({ startupTimeout: v } as Partial<AnyNodeData>)
+              }
+            />
+          </Field>
+          <Field label="log_path (optional)">
+            <TextInput
+              value={data.logPath}
+              onChange={(v) =>
+                onPatch({ logPath: v } as Partial<AnyNodeData>)
+              }
+              placeholder="vllm.log"
+            />
+          </Field>
+          <Field label="extra_args (space-separated)">
+            <TextInput
+              value={data.extraArgs}
+              onChange={(v) =>
+                onPatch({ extraArgs: v } as Partial<AnyNodeData>)
+              }
+              placeholder="--enable-prefix-caching"
+            />
+          </Field>
+        </>
+      )}
     </>
   );
 }

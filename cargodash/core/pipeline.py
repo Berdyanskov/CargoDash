@@ -1,6 +1,6 @@
 """Pipeline: walks the DAG from a source, validates schema, runs it."""
 from __future__ import annotations
-from typing import List
+from typing import Iterator, List
 
 from .module import Module
 
@@ -56,6 +56,67 @@ class Pipeline:
                 )
 
     def run(self) -> None:
-        # Lazy import so `core` doesn't depend on `runtime`.
+        # Lazy import so `core` doesn't depend on `runtime` / `models`.
         from ..runtime.executor import Executor
-        Executor().run(self)
+
+        clients = self._collect_clients()
+        opened: list = []
+        try:
+            for client in clients:
+                # Any failure here (OOM, vllm not installed, port in use,
+                # readiness timeout) propagates up — pipeline never starts.
+                client.open()
+                opened.append(client)
+            Executor().run(self)
+        finally:
+            # LIFO close. Don't let cleanup errors mask an earlier failure;
+            # report them on stderr instead.
+            for client in reversed(opened):
+                try:
+                    client.close()
+                except BaseException as e:  # noqa: BLE001
+                    import sys
+                    print(
+                        f"[cargodash] error closing {type(client).__name__}: {e}",
+                        file=sys.stderr,
+                    )
+
+    # -- client lifecycle helpers --------------------------------------------
+
+    def _collect_clients(self) -> list:
+        """Return a deduplicated list of every ``ChatClient`` reachable
+        from the DAG. Walks each node's ``fn`` attribute, descending
+        through ``LLMCall.client`` and ``Vote.models`` items. Dedup is
+        by object identity so the same client referenced from multiple
+        nodes / multiple Vote slots is opened exactly once."""
+        from ..models.client import ChatClient
+        seen: dict[int, ChatClient] = {}
+        for node in self.nodes:
+            for client in _walk_clients(getattr(node, "fn", None)):
+                seen.setdefault(id(client), client)
+        return list(seen.values())
+
+
+def _walk_clients(obj) -> Iterator:
+    """Best-effort traversal: yield every ``ChatClient`` reachable from
+    ``obj`` via known attribute names. Kept structural rather than
+    type-name-dependent so user-supplied wrappers can also expose a
+    ``.client`` or ``.models`` and be picked up.
+    """
+    from ..models.client import ChatClient
+    if obj is None:
+        return
+    if isinstance(obj, ChatClient):
+        yield obj
+        return
+    client = getattr(obj, "client", None)
+    if isinstance(client, ChatClient):
+        yield client
+    models = getattr(obj, "models", None)
+    if models is not None:
+        try:
+            iterator = iter(models)
+        except TypeError:
+            return
+        for m in iterator:
+            yield from _walk_clients(m)

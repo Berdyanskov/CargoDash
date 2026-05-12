@@ -6,9 +6,14 @@
 
 > 🇨🇳 **中文用户请看 [README_ch.md](README_ch.md)** — 本文件是其英文镜像。
 
-> ⚠️ **Preview release (v0.2.1)**: APIs and internals may still change without compatibility guarantees. Feedback and issues are welcome; not yet recommended for production use.
+> ⚠️ **Preview release (v0.2.2)**: APIs and internals may still change without compatibility guarantees. Feedback and issues are welcome; not yet recommended for production use.
 
 CargoDash is a Python library for building **simple, modular, versatile, and efficient** LLM training-data synthesis & augmentation pipelines. Core idea: any data-processing pipeline can be expressed by nesting two primitives — **sequence** and **branch**.
+
+## New in v0.2.2
+
+- **Local model deployment**: alongside the existing remote API path, you can now run models locally via `LocalHFChatClient` (in-process `transformers`) or `LocalVLLMChatClient` (CargoDash spawns `vllm serve` as a subprocess and tears it down on exit). The pipeline opens every model up-front and shares one loaded instance across all referencing nodes, so duplicate-load OOMs never happen. See [Model deployment](#model-deployment).
+- **WebUI: `ModelSpec` node** — a floating node (like `Vote`) that declares a model once; `LLMCall` references it from a dropdown. Codegen emits one top-level client singleton, naturally enforcing single-load.
 
 ## New in v0.2.1
 
@@ -25,6 +30,7 @@ CargoDash is a Python library for building **simple, modular, versatile, and eff
 
 - **Three core primitives**: `Processor` (sequential), `Judge` (branching, sample / batch granularity), `Vote` (multi-model voting, usable as a `Judge` predicate).
 - **`LLMCall`, one line to call a model**: built-in OpenAI-compatible client covers OpenAI / DeepSeek / Zhipu / Moonshot / Qwen / vLLM / SGLang / Ollama and more.
+- **Three model-deployment kinds in one API**: remote OpenAI-compatible (`OpenAICompatChatClient`), in-process HF (`LocalHFChatClient`), or CargoDash-managed vLLM subprocess (`LocalVLLMChatClient`) — declare once, share across the DAG.
 - **Batches as the flow unit**: streaming batches between modules; `batch_size = 1` naturally degenerates to per-row processing.
 - **DAG via Python operators**: `>>` connects nodes; `Judge.on_true` / `on_false` are named ports for branches; convergence is identified by object identity.
 - **Strongly-typed schema**: built on `pyarrow.Schema`, validated statically at graph-construction time, including convergence-point schema consistency.
@@ -105,6 +111,44 @@ Pipeline(source).run()
 
 A full runnable example: [`examples/basic_pipeline.py`](examples/basic_pipeline.py).
 
+## Model deployment
+
+Three `ChatClient` implementations, all behind the same `chat(messages, **kwargs) -> str` contract. `LLMCall(client=...)` accepts any of them. `Pipeline.run()` calls `open()` on every client before the executor starts (so failures — OOM, vLLM not installed, port collision — fail fast) and `close()` in a `finally` (so the vLLM subprocess is always reaped):
+
+```python
+from cargodash import (
+    OpenAICompatChatClient, LocalHFChatClient, LocalVLLMChatClient,
+)
+
+# 1) Remote OpenAI-compatible: OpenAI, DeepSeek, Moonshot, Zhipu,
+#    externally-running vLLM/SGLang/Ollama, etc.
+remote = OpenAICompatChatClient(model="gpt-4.1-mini", api_key="sk-...")
+
+# 2) In-process Hugging Face transformers — fits small models, single-GPU.
+hf = LocalHFChatClient("Qwen/Qwen2.5-1.5B-Instruct",
+                       device="cuda", dtype="bfloat16")
+
+# 3) CargoDash-managed `vllm serve` subprocess — recommended for any
+#    serious size. open() boots vllm and waits for /v1/models;
+#    close() terminates it cleanly.
+vllm = LocalVLLMChatClient(
+    "/share/models/Qwen3.5-397B-A17B",
+    tensor_parallel_size=8,
+    gpu_memory_utilization=0.9,
+    dtype="bfloat16",
+)
+```
+
+Install the matching extras only when you need them:
+
+```bash
+pip install cargodash[openai]      # for OpenAICompatChatClient
+pip install cargodash[local-hf]    # for LocalHFChatClient
+pip install cargodash[local-vllm]  # for LocalVLLMChatClient
+```
+
+Two `LLMCall` nodes referencing the *same* client object share a single loaded model — the framework dedups by object identity, so big local weights never get loaded twice. End-to-end vLLM example: [`examples/vllm_pipeline.py`](examples/vllm_pipeline.py).
+
 ## WebUI (visual pipeline editor)
 
 If you'd rather not write Python by hand, starting with v0.2.1 CargoDash ships a browser-based visual editor: drag nodes, connect them, fill in parameters / write fns in the right-side panel, and export `pipeline.py` with one click — then run it with `python pipeline.py`.
@@ -113,7 +157,7 @@ If you'd rather not write Python by hand, starting with v0.2.1 CargoDash ships a
   <img src="assets/images/webui1.png" alt="CargoDash WebUI" width="900">
 </p>
 
-**Supported nodes**: `RawDataSource` / `DataOutput` / `Processor` / `Judge` / `Vote` / `LLMCall`, one-to-one with the Python API. `Judge` exposes two output ports (`on_true` / `on_false`). `Vote` is not wired by an edge — it's referenced from a `Judge`'s properties panel and inlined as `Judge(Vote(...), ...)` at export time.
+**Supported nodes**: `RawDataSource` / `DataOutput` / `Processor` / `Judge` / `Vote` / `LLMCall` / `ModelSpec`, one-to-one with the Python API. `Judge` exposes two output ports (`on_true` / `on_false`). `Vote` and `ModelSpec` are not wired by edges — `Vote` is referenced from a `Judge`'s properties panel; `ModelSpec` (kind ∈ remote / local_hf / local_vllm) is referenced from `LLMCall`'s "client source" dropdown and emitted as a top-level singleton at export time, so multiple `LLMCall`s sharing one big local model load it exactly once.
 
 **User-defined functions**: `Processor.fn` / `Judge.predicate(code)` / `Vote.model_list[*]` are written directly in a Monaco editor inside each node's properties panel; they are emitted as top-level `def` blocks at the top of the generated `.py`. `LLMCall` uses a fully structured form instead.
 
@@ -160,12 +204,13 @@ CargoDash/
 ## Roadmap
 
 Done in v0.2: core DAG / Schema / streaming + backpressure / `LLMCall` + OpenAI-compat client / node-failure tolerance.  
-Done in v0.2.1: WebUI visual editor + one-way `pipeline.py` codegen.
+Done in v0.2.1: WebUI visual editor + one-way `pipeline.py` codegen.  
+Done in v0.2.2: local-model deployment (`LocalHFChatClient` + `LocalVLLMChatClient`); `ChatClient.open()` / `close()` lifecycle; WebUI `ModelSpec` floating node.
 
 Up next, in priority order:
 
 - Built-in operator library (text cleaning / dedup / quality scoring / SFT conversation synthesis)
-- Native vLLM / SGLang protocols (bypassing the OpenAI SDK for a more efficient local path)
+- Native SGLang protocol (current vLLM path uses the OpenAI-compat subprocess; SGLang and an in-process vLLM Python-API option are still TODO)
 - Retry / rate-limit / resume; intermediate-artifact versioning (cf. DataFlow `storage.step()`)
 - Cross-batch concurrency; multi-process / distributed (threading → multiproc → Ray)
 - I/O formats: parquet / csv / HuggingFace datasets

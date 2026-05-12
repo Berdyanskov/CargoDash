@@ -40,16 +40,19 @@ export function NumberInput({
   value,
   onChange,
   min,
+  step,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
+  step?: number;
 }) {
   return (
     <input
       type="number"
       value={value}
       min={min}
+      step={step}
       onChange={(e) => onChange(Number(e.target.value))}
       className="w-full text-xs px-2 py-1 border rounded"
     />

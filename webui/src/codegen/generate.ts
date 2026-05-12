@@ -16,6 +16,7 @@ import type {
   EdgePort,
   GraphProject,
   JudgeData,
+  ModelSpecData,
   ProcessorData,
   RawDataSourceData,
   DataOutputData,
@@ -114,9 +115,9 @@ function buildAdjacency(
   return { fwd, inDeg };
 }
 
-function topoSort(project: GraphProject, voteIds: Set<string>): string[] {
-  // Skip Vote nodes — they're not part of the runtime graph.
-  const live = project.nodes.filter((n) => !voteIds.has(n.id));
+function topoSort(project: GraphProject, floatIds: Set<string>): string[] {
+  // Skip "floating" nodes (Vote, ModelSpec) — referenced, not connected.
+  const live = project.nodes.filter((n) => !floatIds.has(n.id));
   const liveIds = new Set(live.map((n) => n.id));
   const fwd = new Map<string, string[]>();
   const inDeg = new Map<string, number>();
@@ -211,6 +212,7 @@ function emitNodeCtor(
   schemas: SchemaPool,
   fnNamesByNode: Map<string, string>,
   voteCtorByJudgeId: Map<string, string>,
+  modelVarByNodeId: Map<string, string>,
 ): string {
   switch (data.kind) {
     case "RawDataSource": {
@@ -256,15 +258,25 @@ function emitNodeCtor(
       const d = data as LLMCallData;
       const inSch = getSchemaVar(schemas, d.inputSchema);
       const outSch = getSchemaVar(schemas, d.outputSchema);
-      // Build LLMCall(...) inline; wrap with Processor so it's a real node.
       const llmArgs: string[] = [
         `prompt=${pyStr(d.prompt)}`,
-        `model=${pyStr(d.model)}`,
-        `api_key=${pyStr(d.apiKey)}`,
         `output_field=${pyStr(d.outputField)}`,
       ];
-      if (d.baseUrl.trim()) {
-        llmArgs.push(`base_url=${pyStr(d.baseUrl)}`);
+      if (d.client.mode === "inline") {
+        llmArgs.push(`model=${pyStr(d.client.model)}`);
+        llmArgs.push(`api_key=${pyStr(d.client.apiKey)}`);
+        if (d.client.baseUrl.trim()) {
+          llmArgs.push(`base_url=${pyStr(d.client.baseUrl)}`);
+        }
+      } else {
+        const modelVar = modelVarByNodeId.get(d.client.modelNodeId);
+        if (!modelVar) {
+          throw new CodegenError(
+            `LLMCall "${varName}" references unknown ModelSpec node id ` +
+              `${d.client.modelNodeId || "(none)"}`,
+          );
+        }
+        llmArgs.push(`client=${modelVar}`);
       }
       let parsedKwargs: Record<string, unknown> = {};
       const raw = d.genKwargs.trim();
@@ -299,6 +311,82 @@ function emitNodeCtor(
       throw new CodegenError(
         `internal: tried to emit Vote node ${varName} as a graph node`,
       );
+    case "ModelSpec":
+      // Should not be called: ModelSpec nodes are emitted as top-level
+      // singletons, not as runtime graph nodes.
+      throw new CodegenError(
+        `internal: tried to emit ModelSpec node ${varName} as a graph node`,
+      );
+  }
+}
+
+function emitModelSpec(data: ModelSpecData, varName: string): {
+  decl: string;
+  importName: string;
+} {
+  switch (data.modelKind) {
+    case "remote": {
+      const args: string[] = [
+        `model=${pyStr(data.model)}`,
+        `api_key=${pyStr(data.apiKey)}`,
+      ];
+      if (data.baseUrl.trim()) {
+        args.push(`base_url=${pyStr(data.baseUrl)}`);
+      }
+      return {
+        decl: `${varName} = OpenAICompatChatClient(${args.join(", ")})`,
+        importName: "OpenAICompatChatClient",
+      };
+    }
+    case "local_hf": {
+      const args: string[] = [pyStr(data.model)];
+      if (data.device.trim()) args.push(`device=${pyStr(data.device)}`);
+      if (data.dtype.trim()) args.push(`dtype=${pyStr(data.dtype)}`);
+      if (data.cacheDir.trim()) args.push(`cache_dir=${pyStr(data.cacheDir)}`);
+      if (data.trustRemoteCode) args.push(`trust_remote_code=True`);
+      if (data.maxNewTokens && data.maxNewTokens !== 512) {
+        args.push(`max_new_tokens=${data.maxNewTokens}`);
+      }
+      return {
+        decl: `${varName} = LocalHFChatClient(${args.join(", ")})`,
+        importName: "LocalHFChatClient",
+      };
+    }
+    case "local_vllm": {
+      const args: string[] = [pyStr(data.model)];
+      if (data.servedModelName.trim()) {
+        args.push(`served_model_name=${pyStr(data.servedModelName)}`);
+      }
+      if (data.dtype.trim()) args.push(`dtype=${pyStr(data.dtype)}`);
+      if (data.tensorParallelSize && data.tensorParallelSize !== 1) {
+        args.push(`tensor_parallel_size=${data.tensorParallelSize}`);
+      }
+      if (
+        typeof data.gpuMemoryUtilization === "number" &&
+        data.gpuMemoryUtilization !== 0.9
+      ) {
+        args.push(`gpu_memory_utilization=${data.gpuMemoryUtilization}`);
+      }
+      if (data.maxModelLen && data.maxModelLen > 0) {
+        args.push(`max_model_len=${data.maxModelLen}`);
+      }
+      if (data.cacheDir.trim()) {
+        args.push(`download_dir=${pyStr(data.cacheDir)}`);
+      }
+      if (data.trustRemoteCode) args.push(`trust_remote_code=True`);
+      if (data.startupTimeout && data.startupTimeout !== 600) {
+        args.push(`startup_timeout=${data.startupTimeout}`);
+      }
+      if (data.logPath.trim()) args.push(`log_path=${pyStr(data.logPath)}`);
+      if (data.extraArgs.trim()) {
+        const tokens = data.extraArgs.split(/\s+/).filter(Boolean);
+        args.push(`extra_args=[${tokens.map(pyStr).join(", ")}]`);
+      }
+      return {
+        decl: `${varName} = LocalVLLMChatClient(${args.join(", ")})`,
+        importName: "LocalVLLMChatClient",
+      };
+    }
   }
 }
 
@@ -330,12 +418,16 @@ export function generatePython(project: GraphProject): string {
   const voteIds = new Set(
     project.nodes.filter((n) => n.data.kind === "Vote").map((n) => n.id),
   );
+  const modelSpecIds = new Set(
+    project.nodes.filter((n) => n.data.kind === "ModelSpec").map((n) => n.id),
+  );
+  const floatingIds = new Set<string>([...voteIds, ...modelSpecIds]);
 
   // -- single source
   const sourceId = findSource(project);
 
-  // -- topological order over non-Vote nodes
-  const topo = topoSort(project, voteIds);
+  // -- topological order over non-floating nodes
+  const topo = topoSort(project, floatingIds);
 
   // -- detect orphans (non-Vote nodes with no upstream and not the source)
   for (const id of topo) {
@@ -428,6 +520,19 @@ export function generatePython(project: GraphProject): string {
     );
   }
 
+  // -- emit ModelSpec singletons (top-level, shared across all references)
+  const modelVarByNodeId = new Map<string, string>();
+  const modelDeclLines: string[] = [];
+  const extraClientImports = new Set<string>();
+  for (const n of project.nodes) {
+    if (n.data.kind !== "ModelSpec") continue;
+    const v = varNames.get(n.id)!;
+    const { decl, importName } = emitModelSpec(n.data, v);
+    modelVarByNodeId.set(n.id, v);
+    modelDeclLines.push(decl);
+    extraClientImports.add(importName);
+  }
+
   // -- emit schemas + node ctors
   const schemas = newSchemaPool();
   const ctorLines: string[] = [];
@@ -435,7 +540,15 @@ export function generatePython(project: GraphProject): string {
     const data = nodeMap[id].data;
     const v = varNames.get(id)!;
     ctorLines.push(
-      emitNodeCtor(id, data, v, schemas, fnNamesByNode, voteCtorByJudgeId),
+      emitNodeCtor(
+        id,
+        data,
+        v,
+        schemas,
+        fnNamesByNode,
+        voteCtorByJudgeId,
+        modelVarByNodeId,
+      ),
     );
   }
 
@@ -443,7 +556,7 @@ export function generatePython(project: GraphProject): string {
   const { fwd } = buildAdjacency(project);
   const edgeLines: string[] = [];
   for (const id of topo) {
-    const outs = (fwd.get(id) ?? []).filter((e) => !voteIds.has(e.target));
+    const outs = (fwd.get(id) ?? []).filter((e) => !floatingIds.has(e.target));
     for (const e of outs) {
       const lhs = varNames.get(id)!;
       const rhs = varNames.get(e.target)!;
@@ -465,18 +578,32 @@ export function generatePython(project: GraphProject): string {
   );
   out.push("from __future__ import annotations");
   out.push("");
-  out.push(
-    "from cargodash import (",
-    "    Schema, RawDataSource, DataOutput,",
-    "    Processor, Judge, Vote, LLMCall, Pipeline,",
-    ")",
-  );
+  const baseImports = [
+    "Schema",
+    "RawDataSource",
+    "DataOutput",
+    "Processor",
+    "Judge",
+    "Vote",
+    "LLMCall",
+    "Pipeline",
+  ];
+  const allImports = [...baseImports, ...Array.from(extraClientImports).sort()];
+  out.push("from cargodash import (");
+  const wrapped = wrapImportList(allImports, 4, 76);
+  for (const line of wrapped) out.push(line);
+  out.push(")");
   out.push("");
   if (fnDefs.length) {
     out.push("# --- user functions --------------------------------------------------------");
     for (const f of fnDefs) {
       out.push(trimmedSource(f.source));
     }
+  }
+  if (modelDeclLines.length) {
+    out.push("# --- model singletons ------------------------------------------------------");
+    for (const line of modelDeclLines) out.push(line);
+    out.push("");
   }
   out.push("# --- schemas ---------------------------------------------------------------");
   for (const def of schemas.defs) out.push(def);
@@ -492,6 +619,33 @@ export function generatePython(project: GraphProject): string {
   out.push("");
 
   return out.join("\n");
+}
+
+/** Wrap a comma-separated import list to fit within a column budget,
+ * indented by ``indent`` spaces. Always emits at least one line. */
+function wrapImportList(
+  names: string[],
+  indent: number,
+  maxWidth: number,
+): string[] {
+  const pad = " ".repeat(indent);
+  const lines: string[] = [];
+  let current = "";
+  for (const name of names) {
+    const piece = `${name},`;
+    if (!current) {
+      current = pad + piece;
+      continue;
+    }
+    if (current.length + 1 + piece.length > maxWidth) {
+      lines.push(current);
+      current = pad + piece;
+    } else {
+      current = `${current} ${piece}`;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 /** If the user wrote `def foo(...):`, but our final emitted name is `foo_2`,

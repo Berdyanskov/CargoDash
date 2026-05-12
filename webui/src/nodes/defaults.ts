@@ -72,14 +72,38 @@ export function defaultNodeData(kind: NodeKind, id: string): AnyNodeData {
         kind,
         varName,
         prompt: "Rewrite this sentence: {text}",
-        model: "gpt-4.1-mini",
-        apiKey: "",
         outputField: "text",
-        baseUrl: "",
+        client: {
+          mode: "inline",
+          model: "gpt-4.1-mini",
+          apiKey: "",
+          baseUrl: "",
+        },
         genKwargs: "{}",
         intraBatchWorkers: 4,
         inputSchema: defaultSchema(),
         outputSchema: defaultSchema(),
+      };
+    case "ModelSpec":
+      return {
+        kind,
+        varName,
+        modelKind: "remote",
+        model: "gpt-4.1-mini",
+        apiKey: "",
+        baseUrl: "",
+        cacheDir: "",
+        trustRemoteCode: false,
+        dtype: "",
+        servedModelName: "",
+        tensorParallelSize: 1,
+        gpuMemoryUtilization: 0.9,
+        maxModelLen: 0,
+        extraArgs: "",
+        startupTimeout: 600,
+        logPath: "",
+        device: "cuda",
+        maxNewTokens: 512,
       };
   }
 }
