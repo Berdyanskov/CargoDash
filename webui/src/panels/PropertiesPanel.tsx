@@ -679,6 +679,56 @@ function ModelSpecForm({
           </Field>
         </>
       )}
+
+      <ModelSpecUsage varName={data.varName} />
     </>
+  );
+}
+
+function ModelSpecUsage({ varName }: { varName: string }) {
+  // Same chat() interface across all three ChatClient subclasses, so one
+  // snippet covers remote / local_hf / local_vllm. Updates live with the
+  // node's varName so users can copy-paste into their Processor fn.
+  const snippet = `reply = ${varName}.chat(
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": f"...prompt... {row['text']}"},
+    ],
+    max_tokens=256,
+    temperature=0.0,
+)
+# reply is a str — return / parse whatever shape your Processor wants.
+
+# Vision input? Use OpenAI's list-content format:
+#   {"role": "user", "content": [
+#       {"type": "text", "text": "..."},
+#       {"type": "image_url",
+#        "image_url": {"url": "data:image/jpeg;base64,..."}}]}
+
+# Or, for the simple "fill a template, write reply to one field" case,
+# prefer the dedicated LLMCall node and pick this ModelSpec in its
+# "client source" dropdown — you get batch fan-out for free.`;
+
+  const copy = () => {
+    void navigator.clipboard?.writeText(snippet);
+  };
+
+  return (
+    <div className="space-y-1 pt-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-wide text-slate-400">
+          usage example (paste into a Processor.fn or Judge.predicate)
+        </span>
+        <button
+          onClick={copy}
+          className="text-[10px] text-sky-600 hover:underline"
+        >
+          copy
+        </button>
+      </div>
+      <pre className="text-[10.5px] leading-snug bg-slate-50 border rounded p-2 font-mono overflow-x-auto whitespace-pre">
+        {snippet}
+      </pre>
+    </div>
   );
 }

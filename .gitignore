@@ -6,5 +6,11 @@ __pycache__/
 build/
 dist/
 examples/_demo_*.jsonl
+examples/in.jsonl
+examples/out.jsonl
 plan.md
 advertisement.md
+in.jsonl
+out.jsonl
+examples/img.jpg
+examples/pipeline.py

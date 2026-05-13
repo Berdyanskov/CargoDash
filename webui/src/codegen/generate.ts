@@ -594,16 +594,21 @@ export function generatePython(project: GraphProject): string {
   for (const line of wrapped) out.push(line);
   out.push(")");
   out.push("");
+  // Models first so user fns below can reference the variables by name.
+  // Function bodies are lazy-evaluated, so the runtime would actually
+  // tolerate either order, but top-to-bottom readability matters and
+  // users frequently scroll to their fn and want to see what client
+  // variable is in scope.
+  if (modelDeclLines.length) {
+    out.push("# --- model singletons ------------------------------------------------------");
+    for (const line of modelDeclLines) out.push(line);
+    out.push("");
+  }
   if (fnDefs.length) {
     out.push("# --- user functions --------------------------------------------------------");
     for (const f of fnDefs) {
       out.push(trimmedSource(f.source));
     }
-  }
-  if (modelDeclLines.length) {
-    out.push("# --- model singletons ------------------------------------------------------");
-    for (const line of modelDeclLines) out.push(line);
-    out.push("");
   }
   out.push("# --- schemas ---------------------------------------------------------------");
   for (const def of schemas.defs) out.push(def);
