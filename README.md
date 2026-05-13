@@ -171,7 +171,7 @@ npm install
 npm run dev          # open http://localhost:5173
 ```
 
-Running this on a remote server? The dev server binds to all interfaces, but the cluster firewall almost certainly blocks port 5173. Use SSH local port forwarding from your laptop: `ssh -L 5173:127.0.0.1:5173 <user>@<remote-host>`, then open `http://localhost:5173` locally — full notes in [`webui/README.md`](webui/README.md#remote-server-access-ssh-port-forwarding).
+Running this on a remote server? `vite.config.ts` is set up with `base: './'`, so the dev server works through your editor's port-forwarding URL whether it lands at a root subdomain (`xxx-5173.<region>.devtunnels.ms/`, VS Code Tunnels / Cursor) or under a subpath proxy (`<host>/<...>/proxy/5173/`, code-server etc.). Full notes (including the SSH-tunnel fallback) in [`webui/README.md`](webui/README.md#remote-server-access).
 
 More details: [`webui/README.md`](webui/README.md).
 

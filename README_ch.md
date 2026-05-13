@@ -166,7 +166,7 @@ npm install
 npm run dev          # 浏览器打开 http://localhost:5173
 ```
 
-**在远程服务器上跑？** dev server 本身已经绑到所有网卡，但集群防火墙基本都挡 5173 端口。在**你的笔记本**上做 SSH 本地端口转发：`ssh -L 5173:127.0.0.1:5173 <用户名>@<远程主机>`，然后笔记本浏览器开 `http://localhost:5173` 即可——完整说明见 [`webui/README.md`](webui/README.md#remote-server-access-ssh-port-forwarding)。
+**在远程服务器上跑？** `vite.config.ts` 已配 `base: './'`，所以无论你通过编辑器的端口转发拿到的是 `xxx-5173.<region>.devtunnels.ms/` 这种根子域名（VS Code Tunnels / Cursor），还是 `<host>/<...>/proxy/5173/` 这种子路径代理（code-server 等），dev server 都能正常打开。完整说明（含 SSH 隧道作为兜底）见 [`webui/README.md`](webui/README.md#remote-server-access)。
 
 更多说明见 [`webui/README.md`](webui/README.md)。
 

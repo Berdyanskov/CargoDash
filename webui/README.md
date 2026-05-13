@@ -20,30 +20,44 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-## Remote server access (SSH port forwarding)
+## Remote server access
 
-If you run `npm run dev` on a remote machine (e.g. a GPU node you SSH'd
-into), `http://localhost:5173` on your laptop won't reach it — clusters
-typically block inbound ports even though Vite already binds to all
-interfaces (`server.host: true` in `vite.config.ts`). Use SSH local port
-forwarding to bridge the two:
+When `npm run dev` runs on a remote machine you reach via your editor's
+port-forwarding feature, you'll hit the dev server through one of two
+URL shapes depending on the editor / tunnel:
 
-On **your laptop**:
+1. **Root subdomain**, e.g. `https://xxx-5173.<region>.devtunnels.ms/` —
+   VS Code Tunnels / Cursor. The forwarded port is on its own subdomain;
+   the app lives at the root path. Just works.
+2. **Subpath proxy**, e.g. `https://<host>/<...>/proxy/5173/` —
+   `code-server` and similar in-browser VS Code variants, JupyterHub
+   gateways, etc. The dev server is mounted under a path prefix.
+
+The subpath case is the one that bites you: an absolute asset URL like
+`/src/main.tsx` in the served HTML resolves to `https://<host>/src/main.tsx`,
+bypassing the `/<...>/proxy/5173/` prefix and 404'ing. We work around
+this with `base: './'` in `vite.config.ts`, which makes all generated
+asset URLs relative to the current page. Relative URLs resolve correctly
+in both the subpath and root-subdomain cases, so the config is
+universally safe — no toggle needed.
+
+If `npm run dev` is bound to all interfaces and the cluster permits SSH,
+classic SSH local port forwarding also works as a fallback:
 
 ```bash
+# on your laptop
 ssh -L 5173:127.0.0.1:5173 <user>@<remote-host>
 ```
 
-Keep that session open, run `npm run dev` inside it, then open
-`http://localhost:5173` in your laptop browser — the tunnel forwards
-each request to the remote dev server.
+then open `http://localhost:5173` in your laptop browser.
 
-- VS Code Remote / Cursor / JetBrains Gateway forward dev-server ports
-  automatically; check the "Ports" panel, no manual `-L` needed.
-- If you go through a jump host, add `-J <user>@<jump-host>` or set
-  `ProxyJump` in `~/.ssh/config`.
-- If `5173` is taken locally, change the local side:
-  `ssh -L 5174:127.0.0.1:5173 ...` and open `http://localhost:5174`.
+### HMR (optional)
+
+Hot-module-reload uses a separate WebSocket channel that `base` does not
+influence. Through a subpath proxy it may or may not survive — depends
+on whether the proxy forwards WebSocket upgrades. If saves stop
+auto-refreshing the page, manually reload; if you want HMR fixed,
+configure `server.hmr` to match your proxy URL.
 
 ## Build
 
