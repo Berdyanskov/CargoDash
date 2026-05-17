@@ -6,9 +6,16 @@
 
 > 🇨🇳 **中文用户请看 [README_ch.md](README_ch.md)** — 本文件是其英文镜像。
 
-> ⚠️ **Preview release (v0.2.3)**: APIs and internals may still change without compatibility guarantees. Feedback and issues are welcome; not yet recommended for production use.
+> ✅ **Stable release (v1.0.0).** Starting from v1.0.0, CargoDash follows [Semantic Versioning](https://semver.org/): the public API exported from `cargodash/__init__.py` will not break within a major version. Breaking changes are reserved for a future major release and announced in advance in [CHANGELOG.md](CHANGELOG.md).
 
 CargoDash is a Python library for building **simple, modular, versatile, and efficient** LLM training-data synthesis & augmentation pipelines. Core idea: any data-processing pipeline can be expressed by nesting two primitives — **sequence** and **branch**.
+
+## New in v1.0.0
+
+- **First stable release.** The public API is now covered by a [Semantic Versioning](https://semver.org/) compatibility guarantee — see the note at the top.
+- **Test suite**: a `unittest`-based suite under [`tests/`](tests/) covering `Schema`, graph construction, pipeline schema validation, `Processor` / `Judge` / `Vote`, `LLMCall`, and end-to-end executor runs. Run it with `python -m unittest discover -s tests` (no extra dependencies needed).
+- **Continuous integration**: GitHub Actions runs the suite on Python 3.10 / 3.11 / 3.12 for every push and pull request.
+- **Single-sourced version**: the package version is defined once in `cargodash/__init__.py` and read dynamically by the build backend.
 
 ## New in v0.2.3
 
@@ -212,7 +219,8 @@ CargoDash/
 Done in v0.2: core DAG / Schema / streaming + backpressure / `LLMCall` + OpenAI-compat client / node-failure tolerance.  
 Done in v0.2.1: WebUI visual editor + one-way `pipeline.py` codegen.  
 Done in v0.2.2: local-model deployment (`LocalHFChatClient` + `LocalVLLMChatClient`); `ChatClient.open()` / `close()` lifecycle; WebUI `ModelSpec` floating node.  
-Done in v0.2.3: WebUI dev/preview config for editor-port-forwarded remote-server access (relative-base, host allow-list, preview block).
+Done in v0.2.3: WebUI dev/preview config for editor-port-forwarded remote-server access (relative-base, host allow-list, preview block).  
+Done in v1.0.0: first stable release — SemVer compatibility guarantee; `unittest` test suite; GitHub Actions CI; single-sourced version.
 
 Up next, in priority order:
 

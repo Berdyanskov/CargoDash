@@ -4,9 +4,16 @@
 
 # CargoDash
 
-> ⚠️ **当前为 Preview 版本（v0.2.3）**：API 与内部实现仍可能在没有兼容性保证的情况下变动，欢迎试用、提 issue，但暂不建议用于生产环境。
+> ✅ **正式稳定版本（v1.0.0）。** 自 v1.0.0 起，CargoDash 遵循[语义化版本](https://semver.org/lang/zh-CN/)：`cargodash/__init__.py` 导出的公共 API 在同一大版本内不会发生破坏性变更；破坏性变更只保留给未来的大版本，并提前在 [CHANGELOG.md](CHANGELOG.md) 中公示。
 
 CargoDash 是一个用于搭建**简单、模块化、多功能、高效**的大模型训练数据合成 / 增强流水线的 Python 库。核心理念：任何数据处理流水线都可以由**顺序**与**分支**两类原语嵌套组合而成。
+
+## v1.0.0 新增
+
+- **首个正式稳定版。** 公共 API 自此受[语义化版本](https://semver.org/lang/zh-CN/)兼容性保证约束，详见文首说明。
+- **测试套件**：[`tests/`](tests/) 下基于 `unittest` 的测试，覆盖 `Schema`、构图、Pipeline schema 校验、`Processor` / `Judge` / `Vote`、`LLMCall` 以及执行器端到端运行。运行 `python -m unittest discover -s tests` 即可（无需额外依赖）。
+- **持续集成**：GitHub Actions 在每次 push 与 PR 上跨 Python 3.10 / 3.11 / 3.12 运行测试。
+- **版本号单一来源**：包版本号仅在 `cargodash/__init__.py` 中定义一次，由构建后端动态读取。
 
 ## v0.2.3 新增
 
@@ -207,7 +214,8 @@ CargoDash/
 v0.2 已完成：核心 DAG / Schema / streaming + backpressure / `LLMCall` + OpenAI 兼容 client / 节点失败容错。  
 v0.2.1 已完成：WebUI 可视化构图 + 单向 codegen 导出 `pipeline.py`。  
 v0.2.2 已完成：本地模型部署（`LocalHFChatClient` + `LocalVLLMChatClient`）、`ChatClient.open()` / `close()` 生命周期、WebUI `ModelSpec` 悬浮节点。  
-v0.2.3 已完成：WebUI dev/preview 配置适配编辑器端口转发的远程访问场景（相对 `base`、host 白名单、`preview` 配置块）。
+v0.2.3 已完成：WebUI dev/preview 配置适配编辑器端口转发的远程访问场景（相对 `base`、host 白名单、`preview` 配置块）。  
+v1.0.0 已完成：首个正式稳定版——SemVer 兼容性保证、`unittest` 测试套件、GitHub Actions CI、版本号单一来源。
 
 后续按优先级：
 
