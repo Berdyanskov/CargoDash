@@ -138,5 +138,99 @@ class TestExecutorEndToEnd(unittest.TestCase):
             Pipeline(src).run()
 
 
+class TestDryRun(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _dryrun_path(self, p: Path) -> Path:
+        return p.parent / f"{p.stem}.dryrun{p.suffix}"
+
+    def test_dry_run_caps_rows_and_redirects_output(self):
+        src_path, out_path = self.dir / "in.jsonl", self.dir / "out.jsonl"
+        _write_jsonl(src_path, [{"v": i} for i in range(100)])
+        # Pre-create production file so we can prove dry-run does NOT touch it.
+        with open(out_path, "w") as f:
+            f.write('{"sentinel": true}\n')
+
+        src = RawDataSource(str(src_path), batch_size=8)
+        sink = DataOutput(str(out_path))
+        src >> Processor(lambda r: r) >> sink
+        Pipeline(src).run(dry_run_rows=10)
+
+        # Production file untouched.
+        self.assertEqual(_read_jsonl(out_path), [{"sentinel": True}])
+        # Dry-run file got exactly 10 rows.
+        dry_path = self._dryrun_path(out_path)
+        self.assertTrue(dry_path.exists())
+        self.assertEqual(len(_read_jsonl(dry_path)), 10)
+        # DataOutput.path is restored after the run.
+        self.assertEqual(sink.path, out_path)
+
+    def test_dry_run_with_cap_smaller_than_batch_size(self):
+        # batch_size=32 but we only want 5 rows — last (only) batch must
+        # be sliced, not dropped.
+        src_path, out_path = self.dir / "in.jsonl", self.dir / "out.jsonl"
+        _write_jsonl(src_path, [{"v": i} for i in range(50)])
+
+        src = RawDataSource(str(src_path), batch_size=32)
+        src >> DataOutput(str(out_path))
+        Pipeline(src).run(dry_run_rows=5)
+
+        dry_path = self._dryrun_path(out_path)
+        rows = _read_jsonl(dry_path)
+        self.assertEqual(len(rows), 5)
+        self.assertEqual([r["v"] for r in rows], [0, 1, 2, 3, 4])
+
+    def test_dry_run_multi_source_caps_each_source_independently(self):
+        a_path = self.dir / "a.jsonl"
+        b_path = self.dir / "b.jsonl"
+        out_path = self.dir / "out.jsonl"
+        _write_jsonl(a_path, [{"v": i, "src": "a"} for i in range(20)])
+        _write_jsonl(b_path, [{"v": i, "src": "b"} for i in range(20)])
+
+        src_a = RawDataSource(str(a_path), batch_size=4)
+        src_b = RawDataSource(str(b_path), batch_size=4)
+        sink = DataOutput(str(out_path))
+        src_a >> sink
+        src_b >> sink
+        Pipeline([src_a, src_b]).run(dry_run_rows=3)
+
+        rows = _read_jsonl(self._dryrun_path(out_path))
+        from_a = [r for r in rows if r["src"] == "a"]
+        from_b = [r for r in rows if r["src"] == "b"]
+        self.assertEqual(len(from_a), 3)
+        self.assertEqual(len(from_b), 3)
+
+    def test_dry_run_rejects_non_positive(self):
+        src_path = self.dir / "in.jsonl"
+        _write_jsonl(src_path, [{"v": 1}])
+        src = RawDataSource(str(src_path))
+        src >> DataOutput(str(self.dir / "out.jsonl"))
+        with self.assertRaises(ValueError):
+            Pipeline(src).run(dry_run_rows=0)
+        with self.assertRaises(ValueError):
+            Pipeline(src).run(dry_run_rows=-5)
+
+    def test_dry_run_restores_output_path_on_processor_failure(self):
+        src_path, out_path = self.dir / "in.jsonl", self.dir / "out.jsonl"
+        _write_jsonl(src_path, [{"v": i} for i in range(5)])
+
+        def boom(row):
+            raise RuntimeError("planned failure")
+
+        src = RawDataSource(str(src_path), batch_size=2)
+        sink = DataOutput(str(out_path))
+        src >> Processor(boom) >> sink
+        with self.assertRaises(RuntimeError):
+            Pipeline(src).run(dry_run_rows=10)
+        # Even though the run errored, the original path must be restored
+        # so the next real run goes to the right file.
+        self.assertEqual(sink.path, out_path)
+
+
 if __name__ == "__main__":
     unittest.main()

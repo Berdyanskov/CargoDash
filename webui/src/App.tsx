@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Canvas } from "./canvas/Canvas";
 import { NodePalette } from "./panels/NodePalette";
 import { PropertiesPanel } from "./panels/PropertiesPanel";
@@ -22,10 +22,17 @@ export default function App() {
   const reset = useGraphStore((s) => s.reset);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Per-export setting — not part of the graph, so it lives in local UI
+  // state and is not persisted in .cdgraph.json.
+  const [dryRunOn, setDryRunOn] = useState(false);
+  const [dryRunRows, setDryRunRows] = useState(10);
+
   const onExportPy = () => {
     const project = toProject();
     try {
-      const code = generatePython(project);
+      const code = generatePython(project, {
+        dryRunRows: dryRunOn ? dryRunRows : null,
+      });
       downloadBlob("pipeline.py", code, "text/x-python");
     } catch (err) {
       alert((err as Error).message);
@@ -75,6 +82,32 @@ export default function App() {
         >
           Export .cdgraph.json
         </button>
+        <label
+          className="flex items-center gap-1 text-xs text-slate-600 select-none"
+          title="Dry-run: cap each RawDataSource to N rows and redirect every DataOutput to a `.dryrun` sibling file. Useful for verifying the pipeline before a full run."
+        >
+          <input
+            type="checkbox"
+            checked={dryRunOn}
+            onChange={(e) => setDryRunOn(e.target.checked)}
+            className="accent-amber-500"
+          />
+          dry-run
+          <input
+            type="number"
+            min={1}
+            value={dryRunRows}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              if (Number.isFinite(n) && n > 0) setDryRunRows(n);
+            }}
+            disabled={!dryRunOn}
+            className="w-14 px-1.5 py-0.5 rounded border border-slate-300 text-right disabled:bg-slate-100 disabled:text-slate-400"
+          />
+          <span className={dryRunOn ? "text-slate-500" : "text-slate-400"}>
+            rows
+          </span>
+        </label>
         <button
           onClick={onExportPy}
           className="text-xs px-3 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-700"

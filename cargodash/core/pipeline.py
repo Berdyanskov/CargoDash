@@ -1,6 +1,6 @@
 """Pipeline: walks the DAG from one or more sources, validates schema, runs it."""
 from __future__ import annotations
-from typing import Iterable, Iterator, List, Union
+from typing import Iterable, Iterator, List, Optional, Union
 
 from .module import Module
 
@@ -65,9 +65,25 @@ class Pipeline:
                     f"from upstreams: [{names}]"
                 )
 
-    def run(self) -> None:
+    def run(self, dry_run_rows: Optional[int] = None) -> None:
+        """Run the pipeline.
+
+        ``dry_run_rows`` (default ``None`` = full run): when set to a
+        positive int, each ``RawDataSource`` emits at most that many rows
+        (truncating the last batch if needed), and every ``DataOutput``
+        writes to a ``<stem>.dryrun<suffix>`` sibling file instead of its
+        configured path — so trial runs never overwrite production
+        artifacts. ``ChatClient.open()`` is still called, so connectivity
+        / OOM / port-collision problems still surface. A per-node
+        ``in -> out`` row-count summary is printed to stderr at the end.
+        """
         # Lazy import so `core` doesn't depend on `runtime` / `models`.
         from ..runtime.executor import Executor
+
+        if dry_run_rows is not None and dry_run_rows <= 0:
+            raise ValueError(
+                f"dry_run_rows must be a positive int, got {dry_run_rows!r}"
+            )
 
         clients = self._collect_clients()
         opened: list = []
@@ -77,7 +93,7 @@ class Pipeline:
                 # readiness timeout) propagates up — pipeline never starts.
                 client.open()
                 opened.append(client)
-            Executor().run(self)
+            Executor().run(self, dry_run_rows=dry_run_rows)
         finally:
             # LIFO close. Don't let cleanup errors mask an earlier failure;
             # report them on stderr instead.

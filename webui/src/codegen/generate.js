@@ -6,7 +6,7 @@
 //   3. emit deduped Schema.of(...) literals
 //   4. emit node ctors in topological order
 //   5. emit `>>` edges using sourceHandle for Judge ports
-//   6. emit `if __name__ == "__main__": Pipeline(source_or_sources).run()`
+//   6. emit `if __name__ == "__main__": Pipeline(source_or_sources).run([dry_run_rows=N])`
 //
 // Vote nodes do not appear on the canvas as connected nodes. They are
 // instantiated where needed and passed into Judge(...).
@@ -329,10 +329,13 @@ function jsonValueToPy(v) {
     }
     throw new CodegenError(`unsupported gen_kwargs value: ${String(v)}`);
 }
-export function generatePython(project) {
+export function generatePython(project, options = {}) {
     if (project.nodes.length === 0) {
         throw new CodegenError("graph is empty");
     }
+    const dryRunRows = options.dryRunRows != null && options.dryRunRows > 0
+        ? Math.floor(options.dryRunRows)
+        : null;
     // -- index nodes
     const nodeMap = {};
     for (const n of project.nodes)
@@ -507,7 +510,8 @@ export function generatePython(project) {
         out.push(line);
     out.push("");
     out.push('if __name__ == "__main__":');
-    out.push(`    Pipeline(${pipelineArg}).run()`);
+    const runArgs = dryRunRows != null ? `dry_run_rows=${dryRunRows}` : "";
+    out.push(`    Pipeline(${pipelineArg}).run(${runArgs})`);
     out.push("");
     return out.join("\n");
 }
