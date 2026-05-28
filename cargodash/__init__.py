@@ -1,7 +1,7 @@
 """CargoDash: a modular pipeline for LLM training data synthesis & augmentation."""
 from .core import Module, Port, Pipeline
 from .data_utils import Schema, Batch
-from .modules import RawDataSource, DataOutput, Processor, Judge
+from .modules import RawDataSource, DataOutput, Processor, Judge, JoinById
 from .voting import Vote
 from .models import (
     ChatClient, OpenAICompatChatClient, MockChatClient,
@@ -11,7 +11,7 @@ from .models import (
 __all__ = [
     "Module", "Port", "Pipeline",
     "Schema", "Batch",
-    "RawDataSource", "DataOutput", "Processor", "Judge",
+    "RawDataSource", "DataOutput", "Processor", "Judge", "JoinById",
     "Vote",
     "ChatClient", "OpenAICompatChatClient", "MockChatClient",
     "LocalHFChatClient", "LocalVLLMChatClient", "LLMCall",

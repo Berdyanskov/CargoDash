@@ -132,6 +132,7 @@ class OpenAICompatChatClient(ChatClient):
         backoff_max: float = 30.0,
         jitter: float = 0.5,
         on_exhaust: Literal["return_empty", "raise"] = "return_empty",
+        include_reasoning: bool = True,
     ):
         """OpenAI-compatible chat client with native retry.
 
@@ -154,6 +155,16 @@ class OpenAICompatChatClient(ChatClient):
                 continues with a row whose downstream verifier will mark
                 it wrong; ``"raise"`` re-raises the last exception and
                 bubbles to the executor (stops the run).
+            include_reasoning: when True (default), if the response message
+                exposes a ``reasoning_content`` field (DeepSeek-R1,
+                GLM-4.5/5.x, Doubao-seed, Moonshot-thinking, … all use
+                this de-facto convention) it is appended to ``content``.
+                Crucially, when ``content`` is empty (reasoning model hit
+                max_tokens before emitting the visible answer), the
+                reasoning text is returned alone so the row carries
+                *something* — downstream verifiers / extractors can still
+                find a ``\\boxed{}`` inside the thinking. Setting False
+                preserves the strict "content only" behavior.
         """
         # Lazy import so cargodash itself doesn't hard-depend on the openai SDK.
         try:
@@ -185,6 +196,7 @@ class OpenAICompatChatClient(ChatClient):
         self._backoff_max = backoff_max
         self._jitter = jitter
         self._on_exhaust = on_exhaust
+        self._include_reasoning = include_reasoning
 
     def chat(self, messages: Messages, **gen_kwargs: Any) -> str:
         def _do_call() -> str:
@@ -193,7 +205,19 @@ class OpenAICompatChatClient(ChatClient):
                 messages=list(messages),
                 **gen_kwargs,
             )
-            return resp.choices[0].message.content or ""
+            msg = resp.choices[0].message
+            content = msg.content or ""
+            if not self._include_reasoning:
+                return content
+            # Vendor extension fields (reasoning_content) are preserved by
+            # the openai SDK on the message object via pydantic extras.
+            reasoning = getattr(msg, "reasoning_content", None) or ""
+            if not reasoning:
+                return content
+            # Concatenate so a `\boxed{}` in either is reachable by the
+            # extractor (it picks the *last* match, so visible content
+            # naturally wins when both are present).
+            return f"{reasoning}\n\n{content}".strip() if content else reasoning
 
         try:
             return _retry_call(

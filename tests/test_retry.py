@@ -252,3 +252,94 @@ def test_client_rejects_bad_args(fake_openai_module):
         OpenAICompatChatClient(model="x", api_key="k", on_exhaust="bogus")
     with pytest.raises(ValueError):
         OpenAICompatChatClient(model="x", api_key="k", max_retries=-1)
+
+
+# -- reasoning_content fallback --------------------------------------------
+
+class _MsgWithReasoning:
+    def __init__(self, content, reasoning_content=None):
+        self.content = content
+        self.reasoning_content = reasoning_content
+
+
+class _ChoiceWithReasoning:
+    def __init__(self, content, reasoning_content=None):
+        self.message = _MsgWithReasoning(content, reasoning_content)
+
+
+class _RespWithReasoning:
+    def __init__(self, content, reasoning_content=None):
+        self.choices = [_ChoiceWithReasoning(content, reasoning_content)]
+
+
+def _install_response(fake_openai_module, content, reasoning_content=None):
+    """Replace the fake module's Completions.create to return a response
+    object that mirrors what the real openai SDK does with vendor extras
+    (i.e. msg.reasoning_content surfaces as an attribute)."""
+    def create(*, model, messages, **kw):
+        fake_openai_module["calls"].append((model, messages))
+        return _RespWithReasoning(content, reasoning_content)
+    fake_openai_module["exc"].OpenAI.return_value = None  # not used
+    # Monkey the create method on the existing FakeClient -> Chat ->
+    # Completions chain set up by the fixture.
+    import sys
+    sys.modules["openai"].OpenAI = type(
+        "_FC", (), {
+            "__init__": lambda self, **kw: setattr(self, "chat", type(
+                "_C", (), {"completions": type(
+                    "_Co", (), {"create": staticmethod(create)})()})()),
+        },
+    )
+
+
+def test_include_reasoning_default_true_appends_reasoning(fake_openai_module):
+    _install_response(
+        fake_openai_module,
+        content="The answer is \\boxed{42}.",
+        reasoning_content="Let me think... 6 * 7 = 42.",
+    )
+    client = OpenAICompatChatClient(model="x", api_key="k", max_retries=0)
+    out = client.chat([{"role": "user", "content": "6 * 7?"}])
+    assert "Let me think... 6 * 7 = 42." in out
+    assert "\\boxed{42}" in out
+    # reasoning comes first so visible \boxed in content is the "last" match
+    assert out.index("Let me think") < out.index("\\boxed")
+
+
+def test_include_reasoning_returns_reasoning_when_content_empty(fake_openai_module):
+    """The whole point: reasoning model hit max_tokens before emitting
+    visible answer. Don't return empty — return what's there."""
+    _install_response(
+        fake_openai_module,
+        content="",
+        reasoning_content="The grid has at most \\boxed{300} cells...",
+    )
+    client = OpenAICompatChatClient(model="x", api_key="k", max_retries=0)
+    out = client.chat([{"role": "user", "content": "max cells?"}])
+    assert out
+    assert "\\boxed{300}" in out
+
+
+def test_include_reasoning_false_returns_content_only(fake_openai_module):
+    _install_response(
+        fake_openai_module,
+        content="visible",
+        reasoning_content="hidden thinking",
+    )
+    client = OpenAICompatChatClient(model="x", api_key="k", max_retries=0,
+                                     include_reasoning=False)
+    out = client.chat([{"role": "user", "content": "x"}])
+    assert out == "visible"
+
+
+def test_include_reasoning_no_field_present_is_noop(fake_openai_module):
+    """Non-reasoning models don't set reasoning_content; behavior must
+    match the pre-feature default (content only)."""
+    _install_response(
+        fake_openai_module,
+        content="just content",
+        reasoning_content=None,
+    )
+    client = OpenAICompatChatClient(model="x", api_key="k", max_retries=0)
+    out = client.chat([{"role": "user", "content": "x"}])
+    assert out == "just content"
