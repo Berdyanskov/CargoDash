@@ -1,0 +1,854 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "modelspec_deepseek",
+      "position": { "x": 60, "y": 40 },
+      "data": {
+        "kind": "ModelSpec",
+        "varName": "deepseek",
+        "modelKind": "remote",
+        "model": "deepseek-reasoner",
+        "apiKey": "${DEEPSEEK_API_KEY}",
+        "baseUrl": "https://api.deepseek.com/v1",
+        "cacheDir": "",
+        "trustRemoteCode": false,
+        "dtype": "",
+        "servedModelName": "",
+        "tensorParallelSize": 1,
+        "gpuMemoryUtilization": 0.9,
+        "maxModelLen": 0,
+        "extraArgs": "",
+        "startupTimeout": 300,
+        "logPath": "",
+        "device": "cuda",
+        "maxNewTokens": 16384
+      }
+    },
+    {
+      "id": "modelspec_doubao",
+      "position": { "x": 360, "y": 40 },
+      "data": {
+        "kind": "ModelSpec",
+        "varName": "doubao",
+        "modelKind": "remote",
+        "model": "doubao-seed-2-0-pro-260215",
+        "apiKey": "${DOUBAO_API_KEY}",
+        "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+        "cacheDir": "",
+        "trustRemoteCode": false,
+        "dtype": "",
+        "servedModelName": "",
+        "tensorParallelSize": 1,
+        "gpuMemoryUtilization": 0.9,
+        "maxModelLen": 0,
+        "extraArgs": "",
+        "startupTimeout": 300,
+        "logPath": "",
+        "device": "cuda",
+        "maxNewTokens": 16384
+      }
+    },
+    {
+      "id": "modelspec_qwen",
+      "position": { "x": 660, "y": 40 },
+      "data": {
+        "kind": "ModelSpec",
+        "varName": "qwen",
+        "modelKind": "remote",
+        "model": "Qwen3.5-397B-A17B",
+        "apiKey": "${QWEN_API_KEY}",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "cacheDir": "",
+        "trustRemoteCode": false,
+        "dtype": "",
+        "servedModelName": "",
+        "tensorParallelSize": 1,
+        "gpuMemoryUtilization": 0.9,
+        "maxModelLen": 0,
+        "extraArgs": "",
+        "startupTimeout": 300,
+        "logPath": "",
+        "device": "cuda",
+        "maxNewTokens": 8192
+      }
+    },
+    {
+      "id": "vote_consensus",
+      "position": { "x": 1000, "y": 40 },
+      "data": {
+        "kind": "Vote",
+        "varName": "vote_all_correct",
+        "models": [
+          {
+            "fnSource": "def m_a(sample):\n    return sample[\"correct_a\"]\n",
+            "fnName": "m_a"
+          },
+          {
+            "fnSource": "def m_b(sample):\n    return sample[\"correct_b\"]\n",
+            "fnName": "m_b"
+          },
+          {
+            "fnSource": "def m_c(sample):\n    return sample[\"correct_c\"]\n",
+            "fnName": "m_c"
+          }
+        ],
+        "trueNum": 3
+      }
+    },
+
+    {
+      "id": "source",
+      "position": { "x": 400, "y": 200 },
+      "data": {
+        "kind": "RawDataSource",
+        "varName": "source",
+        "path": "recipes/verified-math-reasoning/_numina_1k.jsonl",
+        "schema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "batchSize": 16
+      }
+    },
+
+    {
+      "id": "judge_decontam",
+      "position": { "x": 400, "y": 320 },
+      "data": {
+        "kind": "Judge",
+        "varName": "judge_decontam",
+        "predicate": {
+          "mode": "code",
+          "fnSource": "def is_clean(row):\n    \"\"\"Drop seeds that overlap MATH-500 / GSM8K-test / AIME validation.\"\"\"\n    from decontam import in_test_benchmarks\n    return not in_test_benchmarks(row[\"problem\"])\n",
+          "fnName": "is_clean"
+        },
+        "granularity": "sample",
+        "intraBatchWorkers": 2,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "drop_contaminated",
+      "position": { "x": 80, "y": 440 },
+      "data": {
+        "kind": "Processor",
+        "varName": "drop_contaminated",
+        "llmMode": false,
+        "mode": "sample",
+        "fnSource": "def log_decontam_drop(row):\n    \"\"\"Log dropped contaminated rows and discard (return None drops the row).\"\"\"\n    import sys\n    print(f\"[decontam] drop id={row['id']}\", file=sys.stderr)\n    return None\n",
+        "fnName": "log_decontam_drop",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "gen_a",
+      "position": { "x": 240, "y": 440 },
+      "data": {
+        "kind": "Processor",
+        "varName": "gen_a",
+        "llmMode": true,
+        "mode": "sample",
+        "fnSource": "",
+        "fnName": "",
+        "llmPrompt": "Reason step by step, then put the final answer inside \\boxed{{}}.\n\nProblem: {problem}",
+        "llmOutputField": "sol_a",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "modelspec_deepseek" },
+        "llmGenKwargs": "{\"max_tokens\": 16384, \"temperature\": 0}",
+        "intraBatchWorkers": 8,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "gen_b",
+      "position": { "x": 460, "y": 440 },
+      "data": {
+        "kind": "Processor",
+        "varName": "gen_b",
+        "llmMode": true,
+        "mode": "sample",
+        "fnSource": "",
+        "fnName": "",
+        "llmPrompt": "Reason step by step, then put the final answer inside \\boxed{{}}.\n\nProblem: {problem}",
+        "llmOutputField": "sol_b",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "modelspec_doubao" },
+        "llmGenKwargs": "{\"max_tokens\": 16384, \"temperature\": 0}",
+        "intraBatchWorkers": 8,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "gen_c",
+      "position": { "x": 680, "y": 440 },
+      "data": {
+        "kind": "Processor",
+        "varName": "gen_c",
+        "llmMode": true,
+        "mode": "sample",
+        "fnSource": "",
+        "fnName": "",
+        "llmPrompt": "Reason step by step, then put the final answer inside \\boxed{{}}.\n\nProblem: {problem}",
+        "llmOutputField": "sol_c",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "modelspec_qwen" },
+        "llmGenKwargs": "{\"max_tokens\": 8192, \"temperature\": 0, \"extra_body\": {\"chat_template_kwargs\": {\"enable_thinking\": false}}}",
+        "intraBatchWorkers": 8,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "join",
+      "position": { "x": 460, "y": 580 },
+      "data": {
+        "kind": "Processor",
+        "varName": "join_sols",
+        "llmMode": false,
+        "mode": "batch",
+        "fnSource": "def join_by_id(batch):\n    \"\"\"JoinById: fan-in merger. Stateful — collects partial rows from the\n    three upstream gens by row['id']; emits when 3 contributions arrived\n    (regardless of content — empty sol_x flows through, verifier handles).\n\n    In v1.0.6 of cargodash this is a built-in operator (`from cargodash\n    import JoinById; join = JoinById(key='id', expected=3, ...)`); this\n    inlined version is the equivalent for WebUI projects that haven't\n    been upgraded yet.\"\"\"\n    import threading\n    from cargodash import Batch\n    if not hasattr(join_by_id, \"_buf\"):\n        join_by_id._buf = {}\n        join_by_id._lock = threading.Lock()\n    required = (\"sol_a\", \"sol_b\", \"sol_c\")\n    ready = []\n    with join_by_id._lock:\n        for row in batch.rows:\n            entry = join_by_id._buf.setdefault(\n                row[\"id\"], {\"slot\": dict(row), \"count\": 0}\n            )\n            for f in required:\n                if row.get(f):\n                    entry[\"slot\"][f] = row[f]\n            entry[\"count\"] += 1\n            if entry[\"count\"] >= 3:\n                ready.append(entry[\"slot\"])\n                del join_by_id._buf[row[\"id\"]]\n    if not ready:\n        return None\n    return Batch(rows=ready, schema=batch.schema)\n",
+        "fnName": "join_by_id",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "parse_verify",
+      "position": { "x": 460, "y": 720 },
+      "data": {
+        "kind": "Processor",
+        "varName": "parse_verify",
+        "llmMode": false,
+        "mode": "sample",
+        "fnSource": "def parse_and_verify(row):\n    \"\"\"Pull each model's \\\\boxed{} answer out of its CoT, compare to the\n    reference numerically, count agreement. Empty sol_x extracts to '' and\n    counts as wrong. Also flips `synthetic` to True since the row now\n    carries AI-generated content (China AIGC labeling compliance).\"\"\"\n    from verifier import extract_boxed_or_number, numeric_equal\n    ans = {k: extract_boxed_or_number(row[f\"sol_{k}\"]) for k in \"abc\"}\n    correct = {k: numeric_equal(ans[k], row[\"reference_answer\"]) for k in \"abc\"}\n    return {\n        **row,\n        \"ans_a\": ans[\"a\"], \"ans_b\": ans[\"b\"], \"ans_c\": ans[\"c\"],\n        \"correct_a\": correct[\"a\"], \"correct_b\": correct[\"b\"], \"correct_c\": correct[\"c\"],\n        \"num_correct\": sum(correct.values()),\n        \"synthetic\": True,\n    }\n",
+        "fnName": "parse_and_verify",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "judge_solvable",
+      "position": { "x": 460, "y": 860 },
+      "data": {
+        "kind": "Judge",
+        "varName": "judge_solvable",
+        "predicate": {
+          "mode": "code",
+          "fnSource": "def is_solvable(row):\n    \"\"\"At least one model got the answer right.\"\"\"\n    return row[\"num_correct\"] >= 1\n",
+          "fnName": "is_solvable"
+        },
+        "granularity": "sample",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "judge_consensus",
+      "position": { "x": 680, "y": 1000 },
+      "data": {
+        "kind": "Judge",
+        "varName": "judge_consensus",
+        "predicate": {
+          "mode": "voteRef",
+          "voteNodeId": "vote_consensus"
+        },
+        "granularity": "sample",
+        "intraBatchWorkers": 2,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "tag_unsolved",
+      "position": { "x": 240, "y": 1000 },
+      "data": {
+        "kind": "Processor",
+        "varName": "tag_unsolved",
+        "llmMode": false,
+        "mode": "sample",
+        "fnSource": "def tag_unsolved(row):\n    return {**row, \"difficulty\": \"unsolved\", \"split\": \"unsolved_flagged\"}\n",
+        "fnName": "tag_unsolved",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "tag_easy",
+      "position": { "x": 560, "y": 1140 },
+      "data": {
+        "kind": "Processor",
+        "varName": "tag_easy",
+        "llmMode": false,
+        "mode": "sample",
+        "fnSource": "def tag_easy(row):\n    return {**row, \"difficulty\": \"easy\", \"split\": \"train_clean\"}\n",
+        "fnName": "tag_easy",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "tag_hard",
+      "position": { "x": 800, "y": 1140 },
+      "data": {
+        "kind": "Processor",
+        "varName": "tag_hard",
+        "llmMode": false,
+        "mode": "sample",
+        "fnSource": "def tag_hard(row):\n    return {**row, \"difficulty\": \"hard\", \"split\": \"hard_disagreement\"}\n",
+        "fnName": "tag_hard",
+        "llmPrompt": "",
+        "llmOutputField": "",
+        "llmClient": { "mode": "modelRef", "modelNodeId": "" },
+        "llmGenKwargs": "{}",
+        "intraBatchWorkers": 1,
+        "inputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "outputSchema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ]
+      }
+    },
+
+    {
+      "id": "out_unsolved",
+      "position": { "x": 240, "y": 1140 },
+      "data": {
+        "kind": "DataOutput",
+        "varName": "out_unsolved",
+        "path": "recipes/verified-math-reasoning/out_unsolved_flagged.jsonl",
+        "schema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "preserveOrder": false
+      }
+    },
+
+    {
+      "id": "out_clean",
+      "position": { "x": 560, "y": 1260 },
+      "data": {
+        "kind": "DataOutput",
+        "varName": "out_clean",
+        "path": "recipes/verified-math-reasoning/out_train_clean.jsonl",
+        "schema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "preserveOrder": false
+      }
+    },
+
+    {
+      "id": "out_hard",
+      "position": { "x": 800, "y": 1260 },
+      "data": {
+        "kind": "DataOutput",
+        "varName": "out_hard",
+        "path": "recipes/verified-math-reasoning/out_hard_disagreement.jsonl",
+        "schema": [
+          { "name": "id", "type": "str" },
+          { "name": "source", "type": "str" },
+          { "name": "problem", "type": "str" },
+          { "name": "reference_answer", "type": "str" },
+          { "name": "sol_a", "type": "str" },
+          { "name": "sol_b", "type": "str" },
+          { "name": "sol_c", "type": "str" },
+          { "name": "ans_a", "type": "str" },
+          { "name": "ans_b", "type": "str" },
+          { "name": "ans_c", "type": "str" },
+          { "name": "correct_a", "type": "bool" },
+          { "name": "correct_b", "type": "bool" },
+          { "name": "correct_c", "type": "bool" },
+          { "name": "num_correct", "type": "int" },
+          { "name": "difficulty", "type": "str" },
+          { "name": "split", "type": "str" },
+          { "name": "synthetic", "type": "bool" }
+        ],
+        "preserveOrder": false
+      }
+    }
+  ],
+
+  "edges": [
+    { "id": "e_source__judge_decontam",       "source": "source",            "target": "judge_decontam",   "sourceHandle": "default" },
+
+    { "id": "e_decontam_false__drop",         "source": "judge_decontam",    "target": "drop_contaminated","sourceHandle": "false"   },
+    { "id": "e_decontam_true__gen_a",         "source": "judge_decontam",    "target": "gen_a",            "sourceHandle": "true"    },
+    { "id": "e_decontam_true__gen_b",         "source": "judge_decontam",    "target": "gen_b",            "sourceHandle": "true"    },
+    { "id": "e_decontam_true__gen_c",         "source": "judge_decontam",    "target": "gen_c",            "sourceHandle": "true"    },
+
+    { "id": "e_gen_a__join",                  "source": "gen_a",             "target": "join",             "sourceHandle": "default" },
+    { "id": "e_gen_b__join",                  "source": "gen_b",             "target": "join",             "sourceHandle": "default" },
+    { "id": "e_gen_c__join",                  "source": "gen_c",             "target": "join",             "sourceHandle": "default" },
+
+    { "id": "e_join__parse_verify",           "source": "join",              "target": "parse_verify",     "sourceHandle": "default" },
+    { "id": "e_parse_verify__judge_solvable", "source": "parse_verify",      "target": "judge_solvable",   "sourceHandle": "default" },
+
+    { "id": "e_solvable_false__tag_unsolved", "source": "judge_solvable",    "target": "tag_unsolved",     "sourceHandle": "false"   },
+    { "id": "e_solvable_true__judge_consensus","source": "judge_solvable",   "target": "judge_consensus",  "sourceHandle": "true"    },
+
+    { "id": "e_consensus_true__tag_easy",     "source": "judge_consensus",   "target": "tag_easy",         "sourceHandle": "true"    },
+    { "id": "e_consensus_false__tag_hard",    "source": "judge_consensus",   "target": "tag_hard",         "sourceHandle": "false"   },
+
+    { "id": "e_tag_unsolved__out_unsolved",   "source": "tag_unsolved",      "target": "out_unsolved",     "sourceHandle": "default" },
+    { "id": "e_tag_easy__out_clean",          "source": "tag_easy",          "target": "out_clean",        "sourceHandle": "default" },
+    { "id": "e_tag_hard__out_hard",           "source": "tag_hard",          "target": "out_hard",         "sourceHandle": "default" }
+  ]
+}
