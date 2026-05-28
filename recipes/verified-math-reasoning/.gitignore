@@ -2,3 +2,4 @@ __pycache__/
 CLAUDE.md
 DESIGN.md
 _numina_sample.jsonl
+pipeline.cdgraph.json

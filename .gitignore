@@ -21,5 +21,5 @@ recipes/**/*.dryrun.jsonl
 recipes/verified-math-reasoning/_numina_sample.jsonl
 recipes/verified-math-reasoning/CLAUDE.md
 recipes/verified-math-reasoning/DESIGN.md
-
+recipes/verified-math-reasoning/pipeline.cdgraph.json
 .pytest_cache/
