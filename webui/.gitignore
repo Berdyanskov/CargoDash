@@ -3,3 +3,9 @@ dist
 .vite
 *.local
 scripts/pipeline.smoke.py
+# Compiled output: .tsx/.ts is the sole source of truth. tsc no longer emits
+# into src/ (build uses `tsc --noEmit`, Vite bundles .tsx directly), and these
+# .js previously shadowed their .tsx siblings because Vite's resolve.extensions
+# prefers .js. Keep them out of the tree.
+src/**/*.js
+*.tsbuildinfo
