@@ -130,12 +130,20 @@ function DataOutputForm({
         />
       </Field>
       <Checkbox
-        label="preserve_order"
+        label="preserve_order (not yet implemented)"
         value={data.preserveOrder}
+        disabled
         onChange={(v) =>
           onPatch({ preserveOrder: v } as Partial<AnyNodeData>)
         }
       />
+      <div className="text-[10.5px] leading-snug text-slate-500 -mt-1">
+        Rows are written in arrival order. Ordered output needs a
+        source-assigned key plus a reorder buffer at the sink — not built
+        yet, so the runtime raises <code className="font-mono">NotImplementedError</code>{" "}
+        on <code className="font-mono">preserve_order=True</code>. Left off
+        until then.
+      </div>
       <SchemaEditor
         label="schema"
         value={data.schema}

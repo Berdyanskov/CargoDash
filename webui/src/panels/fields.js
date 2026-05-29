@@ -11,8 +11,8 @@ export function NumberInput({ value, onChange, min, step, }) {
 export function Select({ value, onChange, options, }) {
     return (_jsx("select", { value: value, onChange: (e) => onChange(e.target.value), className: "w-full text-xs px-2 py-1 border rounded", children: options.map((o) => (_jsx("option", { value: o, children: o }, o))) }));
 }
-export function Checkbox({ value, onChange, label, }) {
-    return (_jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [_jsx("input", { type: "checkbox", checked: value, onChange: (e) => onChange(e.target.checked) }), label] }));
+export function Checkbox({ value, onChange, label, disabled, }) {
+    return (_jsxs("label", { className: `flex items-center gap-2 text-xs ${disabled ? "text-slate-400" : "text-slate-600"}`, children: [_jsx("input", { type: "checkbox", checked: value, disabled: disabled, onChange: (e) => onChange(e.target.checked) }), label] }));
 }
 export function TextArea({ value, onChange, rows = 3, }) {
     return (_jsx("textarea", { value: value, rows: rows, onChange: (e) => onChange(e.target.value), className: "w-full text-xs px-2 py-1 border rounded font-mono" }));

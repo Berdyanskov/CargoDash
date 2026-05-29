@@ -164,18 +164,63 @@ export const useGraphStore = create((set, get) => ({
             ? { ...n, data: { ...n.data, ...patch } }
             : n),
     })),
-    deleteNode: (id) => set((s) => ({
-        nodes: s.nodes.filter((n) => n.id !== id),
-        edges: s.edges.filter((e) => e.source !== id && e.target !== id),
-        selectedId: s.selectedId === id ? null : s.selectedId,
-    })),
+    deleteNode: (id) => set((s) => {
+        // Scrub references to the deleted node held by *floating*-node
+        // consumers (ModelSpec referenced by a Processor's llmClient; Vote
+        // referenced by a Judge's voteRef predicate). Edges are dropped
+        // below, but these references aren't edges — left dangling they'd
+        // point at a now-missing id and only surface as a confusing
+        // CodegenError at export time. Resetting to "" drops the consumer
+        // back to its "unconfigured" state, which the property-panel
+        // dropdowns and codegen already handle (they prompt the user to
+        // pick one).
+        const nodes = s.nodes
+            .filter((n) => n.id !== id)
+            .map((n) => {
+            if (n.data.kind === "Processor" &&
+                n.data.llmClient.modelNodeId === id) {
+                return {
+                    ...n,
+                    data: {
+                        ...n.data,
+                        llmClient: { mode: "modelRef", modelNodeId: "" },
+                    },
+                };
+            }
+            if (n.data.kind === "Judge" &&
+                n.data.predicate.mode === "voteRef" &&
+                n.data.predicate.voteNodeId === id) {
+                return {
+                    ...n,
+                    data: {
+                        ...n.data,
+                        predicate: { mode: "voteRef", voteNodeId: "" },
+                    },
+                };
+            }
+            return n;
+        });
+        return {
+            nodes,
+            edges: s.edges.filter((e) => e.source !== id && e.target !== id),
+            selectedId: s.selectedId === id ? null : s.selectedId,
+        };
+    }),
     selectNode: (id) => set({ selectedId: id }),
     loadProject: (project) => {
         if (project.version !== 1) {
             throw new Error(`unsupported project version: ${project.version}`);
         }
         const migrated = migrateProject(project);
-        nodeCounter = Math.max(nodeCounter, ...migrated.nodes.map((n) => parseInt(n.id.split("_").pop() ?? "0", 10)));
+        // Recover the fresh-id counter from existing `*_<n>` ids. Guard the
+        // parse the same way migrateProject does: an id without a trailing
+        // `_<digits>` (hand-written / custom id) contributes 0 rather than
+        // NaN — `Math.max(..., NaN)` is NaN, which would poison every later
+        // `nextNodeId` into `Kind_NaN`.
+        nodeCounter = Math.max(nodeCounter, ...migrated.nodes.map((n) => {
+            const m = n.id.match(/_(\d+)$/);
+            return m ? parseInt(m[1], 10) : 0;
+        }));
         set({
             nodes: migrated.nodes.map((n) => ({
                 id: n.id,

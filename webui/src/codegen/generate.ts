@@ -261,6 +261,16 @@ function emitNodeCtor(
     }
     case "DataOutput": {
       const d = data as DataOutputData;
+      // The runtime raises NotImplementedError on preserve_order=True. The
+      // property panel disables the toggle, but a hand-edited / legacy
+      // .cdgraph.json could still carry it — fail clearly here at export
+      // rather than emitting code that crashes mid-run.
+      if (d.preserveOrder) {
+        throw new CodegenError(
+          `DataOutput "${varName}": preserve_order=true is not yet implemented ` +
+            `(the runtime raises NotImplementedError) — set it back to false.`,
+        );
+      }
       const sch = getSchemaVar(schemas, d.schema);
       return `${varName} = DataOutput(${pyStr(d.path)}, schema=${sch}, preserve_order=${pyBool(d.preserveOrder)})`;
     }
