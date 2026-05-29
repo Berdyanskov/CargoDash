@@ -16,6 +16,7 @@ import type {
   EdgePort,
   GraphProject,
   JudgeData,
+  JoinByIdData,
   ModelSpecData,
   ProcessorData,
   RawDataSourceData,
@@ -301,6 +302,27 @@ function emitNodeCtor(
       ];
       return `${varName} = Processor(${args.join(", ")})`;
     }
+    case "JoinById": {
+      const d = data as JoinByIdData;
+      const inSch = getSchemaVar(schemas, d.schema);
+      const args = [`key=${pyStr(d.key)}`];
+      // Empty fields box -> omit the arg so Python's default (None =
+      // "merge every non-empty field") applies. A non-empty list narrows
+      // the merge to exactly those fields.
+      const fields = d.fields
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (fields.length > 0) {
+        args.push(`fields=[${fields.map(pyStr).join(", ")}]`);
+      }
+      args.push(`expected=${d.expected}`);
+      // Only input_schema is emitted: JoinById doesn't reshape rows, so the
+      // runtime defaults output_schema to input_schema. Emitting both would
+      // risk the runtime's "input_schema must equal output_schema" guard.
+      args.push(`input_schema=${inSch}`);
+      return `${varName} = JoinById(${args.join(", ")})`;
+    }
     case "Judge": {
       const d = data as JudgeData;
       const inSch = getSchemaVar(schemas, d.inputSchema);
@@ -342,6 +364,19 @@ function emitModelSpec(data: ModelSpecData, varName: string): {
       ];
       if (data.baseUrl.trim()) {
         args.push(`base_url=${pyStr(data.baseUrl)}`);
+      }
+      // Emit retry/behavior kwargs only when they differ from the Python
+      // client's own defaults, so an untouched ModelSpec stays terse.
+      if (data.timeout !== 60) args.push(`timeout=${data.timeout}`);
+      if (data.maxRetries !== 5) args.push(`max_retries=${data.maxRetries}`);
+      if (data.backoffBase !== 1) args.push(`backoff_base=${data.backoffBase}`);
+      if (data.backoffMax !== 30) args.push(`backoff_max=${data.backoffMax}`);
+      if (data.jitter !== 0.5) args.push(`jitter=${data.jitter}`);
+      if (data.onExhaust !== "return_empty") {
+        args.push(`on_exhaust=${pyStr(data.onExhaust)}`);
+      }
+      if (data.includeReasoning === false) {
+        args.push(`include_reasoning=False`);
       }
       return {
         decl: `${varName} = OpenAICompatChatClient(${args.join(", ")})`,
@@ -612,6 +647,7 @@ export function generatePython(
     "DataOutput",
     "Processor",
     "Judge",
+    "JoinById",
     "Vote",
     "LLMCall",
     "Pipeline",

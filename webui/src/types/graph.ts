@@ -14,6 +14,7 @@ export type NodeKind =
   | "DataOutput"
   | "Processor"
   | "Judge"
+  | "JoinById"
   | "Vote"
   | "ModelSpec";
 
@@ -92,6 +93,24 @@ export interface ProcessorData extends NodeBase {
   outputSchema: SchemaField[];
 }
 
+/** JoinById: stateful per-key fan-in merger. A connected DAG node (unlike
+ * floating Vote/ModelSpec) — multiple upstream branches feed its single
+ * target handle, and it emits a merged row once ``expected`` branches have
+ * reported for the same ``key``. JoinById doesn't reshape rows, so only one
+ * schema is exposed (output inherits input in the runtime). */
+export interface JoinByIdData extends NodeBase {
+  kind: "JoinById";
+  /** Row field that identifies which partial rows belong together. */
+  key: string;
+  /** Comma-separated field names to merge from each contributing upstream.
+   * Empty = merge every non-empty field (Python ``fields=None``). Stored
+   * raw like ``ModelSpecData.extraArgs``; split at codegen time. */
+  fields: string;
+  /** How many upstreams must report for the same key before emitting. */
+  expected: number;
+  schema: SchemaField[];
+}
+
 export type JudgeGranularity = "sample" | "batch";
 
 /** Judge predicate is either user-written code OR a reference to a Vote node. */
@@ -128,6 +147,18 @@ export interface ModelSpecData extends NodeBase {
   // -- remote -------------------------------------------------------------
   apiKey: string;
   baseUrl: string;
+  /** Retry / behavior knobs on the generated OpenAICompatChatClient.
+   * Defaults below mirror the Python client's own defaults, so an
+   * untouched ModelSpec emits no extra kwargs and behaves as before. */
+  timeout: number; // seconds per request (Python default 60)
+  maxRetries: number; // extra attempts after the first (default 5)
+  backoffBase: number; // seconds (default 1)
+  backoffMax: number; // seconds (default 30)
+  jitter: number; // seconds, 0 = off (default 0.5)
+  /** After retries are exhausted: return "" (keep streaming) or raise. */
+  onExhaust: "return_empty" | "raise";
+  /** Append vendor reasoning_content to the reply (default true). */
+  includeReasoning: boolean;
 
   // -- local_hf + local_vllm ---------------------------------------------
   cacheDir: string;
@@ -155,6 +186,7 @@ export type AnyNodeData =
   | DataOutputData
   | ProcessorData
   | JudgeData
+  | JoinByIdData
   | VoteData
   | ModelSpecData;
 

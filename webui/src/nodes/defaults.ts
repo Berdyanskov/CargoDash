@@ -63,6 +63,15 @@ export function defaultNodeData(kind: NodeKind, id: string): AnyNodeData {
         intraBatchWorkers: 1,
         inputSchema: defaultSchema(),
       };
+    case "JoinById":
+      return {
+        kind,
+        varName,
+        key: "id",
+        fields: "",
+        expected: 2,
+        schema: defaultSchema(),
+      };
     case "Vote":
       return {
         kind,
@@ -84,6 +93,13 @@ export function defaultNodeData(kind: NodeKind, id: string): AnyNodeData {
         model: "gpt-4.1-mini",
         apiKey: "",
         baseUrl: "",
+        timeout: 60,
+        maxRetries: 5,
+        backoffBase: 1,
+        backoffMax: 30,
+        jitter: 0.5,
+        onExhaust: "return_empty",
+        includeReasoning: true,
         cacheDir: "",
         trustRemoteCode: false,
         dtype: "",

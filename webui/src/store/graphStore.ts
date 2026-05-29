@@ -13,6 +13,7 @@ import type {
   AnyNodeData,
   EdgePort,
   GraphProject,
+  ModelSpecData,
   NodeKind,
   ProcessorData,
 } from "../types/graph";
@@ -63,6 +64,24 @@ export function migrateNodeData(raw: unknown): AnyNodeData {
     };
     return out;
   }
+  if (d.kind === "ModelSpec" && d.maxRetries === undefined) {
+    // Backfill the remote retry/behavior fields added after the original
+    // ModelSpec shape. Defaults mirror OpenAICompatChatClient's own
+    // defaults, so a legacy spec keeps behaving exactly as it did before
+    // these knobs existed. (Harmless on local_hf/local_vllm specs too —
+    // codegen only reads them on the remote path.)
+    const out: ModelSpecData = {
+      ...(d as unknown as ModelSpecData),
+      timeout: 60,
+      maxRetries: 5,
+      backoffBase: 1,
+      backoffMax: 30,
+      jitter: 0.5,
+      onExhaust: "return_empty",
+      includeReasoning: true,
+    };
+    return out;
+  }
   if (d.kind === "Processor" && d.llmMode === undefined) {
     // Backfill new llm* fields on a pre-merge Processor. Use modelRef
     // with empty id as the placeholder — codegen will tell the user to
@@ -97,6 +116,13 @@ function remoteModelSpecFrom(
     model,
     apiKey,
     baseUrl,
+    timeout: 60,
+    maxRetries: 5,
+    backoffBase: 1,
+    backoffMax: 30,
+    jitter: 0.5,
+    onExhaust: "return_empty",
+    includeReasoning: true,
     cacheDir: "",
     trustRemoteCode: false,
     dtype: "",
@@ -197,8 +223,32 @@ interface GraphState {
   reset: () => void;
 }
 
-let nodeCounter = 0;
-const nextNodeId = (kind: NodeKind) => `${kind}_${++nodeCounter}`;
+/** Pick a default id for a new ``kind`` node: ``<kind>_<n>`` where ``n`` is
+ * the smallest positive integer not currently used by a *same-kind* node.
+ *
+ * Replaces the old global monotonic counter, which (a) was shared across all
+ * kinds (so the first Processor became ``processor_2`` after a source) and
+ * (b) only ever grew (delete+recreate climbed to ``_3``, ``_4``, …).
+ *
+ * Per-kind numbering keeps the prefix meaningful (first Processor is
+ * ``Processor_1``), and "smallest unused" both recycles freed numbers after a
+ * delete and matches the user's "existing-count + 1" intuition when ids are
+ * contiguous — while never colliding with a live node (a plain count+1 would:
+ * delete ``Processor_1`` while ``Processor_2`` lives → count is 1 → ``_2``
+ * collides). Kind is read from ``data.kind`` (authoritative) and the suffix
+ * from the id; imported nodes with non-``_<n>`` ids simply don't reserve a
+ * number, and the ``<kind>_`` prefix still guarantees global uniqueness. */
+function freshNodeId(kind: NodeKind, nodes: FlowNode[]): string {
+  const used = new Set<number>();
+  for (const n of nodes) {
+    if (n.data.kind !== kind) continue;
+    const m = n.id.match(/_(\d+)$/);
+    if (m) used.add(parseInt(m[1], 10));
+  }
+  let i = 1;
+  while (used.has(i)) i++;
+  return `${kind}_${i}`;
+}
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
@@ -228,14 +278,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   addNode: (kind, position) =>
     set((s) => {
-      const id = nextNodeId(kind);
+      const id = freshNodeId(kind, s.nodes);
       const data = defaultNodeData(kind, id);
       const node: FlowNode = { id, type: kind, position, data };
       return { nodes: [...s.nodes, node], selectedId: id };
     }),
 
   createNode: (kind, position) => {
-    const id = nextNodeId(kind);
+    const id = freshNodeId(kind, get().nodes);
     const data = defaultNodeData(kind, id);
     set((s) => ({
       nodes: [...s.nodes, { id, type: kind, position, data }],
@@ -307,18 +357,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       throw new Error(`unsupported project version: ${project.version}`);
     }
     const migrated = migrateProject(project);
-    // Recover the fresh-id counter from existing `*_<n>` ids. Guard the
-    // parse the same way migrateProject does: an id without a trailing
-    // `_<digits>` (hand-written / custom id) contributes 0 rather than
-    // NaN — `Math.max(..., NaN)` is NaN, which would poison every later
-    // `nextNodeId` into `Kind_NaN`.
-    nodeCounter = Math.max(
-      nodeCounter,
-      ...migrated.nodes.map((n) => {
-        const m = n.id.match(/_(\d+)$/);
-        return m ? parseInt(m[1], 10) : 0;
-      }),
-    );
+    // No id-counter to prime: freshNodeId() derives the next number from the
+    // live nodes on each create, so loading a project (with any id shapes,
+    // including non-`_<n>` ones) needs no bookkeeping here. This also retires
+    // the old `Math.max(..., NaN)` counter-poisoning hazard entirely.
     set({
       nodes: migrated.nodes.map((n) => ({
         id: n.id,

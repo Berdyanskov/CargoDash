@@ -5,6 +5,7 @@ const descriptions = {
     DataOutput: "jsonl sink",
     Processor: "user-defined fn — toggle LLM mode for single-turn LLM calls",
     Judge: "split on_true / on_false",
+    JoinById: "merge fan-out branches by key (fan-in)",
     Vote: "multi-model vote (referenced by Judge)",
     ModelSpec: "model deployment (remote / local HF / local vLLM)",
 };

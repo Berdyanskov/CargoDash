@@ -3,6 +3,7 @@ import type {
   AnyNodeData,
   DataOutputData,
   JudgeData,
+  JoinByIdData,
   ModelKind,
   ModelSpecData,
   ProcessorData,
@@ -73,6 +74,9 @@ export function PropertiesPanel() {
         <ProcessorForm data={data} onPatch={patch} />
       )}
       {data.kind === "Judge" && <JudgeForm data={data} onPatch={patch} />}
+      {data.kind === "JoinById" && (
+        <JoinByIdForm data={data} onPatch={patch} />
+      )}
       {data.kind === "Vote" && <VoteForm data={data} onPatch={patch} />}
       {data.kind === "ModelSpec" && (
         <ModelSpecForm data={data} onPatch={patch} />
@@ -424,6 +428,44 @@ function JudgeForm({ data, onPatch }: { data: JudgeData; onPatch: Patcher }) {
   );
 }
 
+function JoinByIdForm({
+  data,
+  onPatch,
+}: {
+  data: JoinByIdData;
+  onPatch: Patcher;
+}) {
+  return (
+    <>
+      <Field label="key (row field that groups partial rows)">
+        <TextInput
+          value={data.key}
+          onChange={(v) => onPatch({ key: v } as Partial<AnyNodeData>)}
+        />
+      </Field>
+      <Field label="expected (upstreams per key before emit)">
+        <NumberInput
+          value={data.expected}
+          min={1}
+          onChange={(v) => onPatch({ expected: v } as Partial<AnyNodeData>)}
+        />
+      </Field>
+      <Field label="merge fields (comma-separated; empty = all non-empty fields)">
+        <TextInput
+          value={data.fields}
+          placeholder="answer, score"
+          onChange={(v) => onPatch({ fields: v } as Partial<AnyNodeData>)}
+        />
+      </Field>
+      <SchemaEditor
+        label="schema (in = out; JoinById doesn't reshape rows)"
+        value={data.schema}
+        onChange={(v) => onPatch({ schema: v } as Partial<AnyNodeData>)}
+      />
+    </>
+  );
+}
+
 function VoteForm({ data, onPatch }: { data: VoteData; onPatch: Patcher }) {
   const updateModel = (i: number, patch: Partial<VoteModelEntry>) => {
     const next = data.models.slice();
@@ -540,6 +582,67 @@ function ModelSpecForm({
               placeholder="https://api.deepseek.com/v1"
             />
           </Field>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400 pt-1">
+            retry &amp; behavior
+          </div>
+          <Field label="max_retries (extra attempts after the first)">
+            <NumberInput
+              value={data.maxRetries}
+              min={0}
+              onChange={(v) => onPatch({ maxRetries: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Field label="timeout (s per request)">
+            <NumberInput
+              value={data.timeout}
+              min={1}
+              onChange={(v) => onPatch({ timeout: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Field label="on_exhaust (after retries run out)">
+            <Select
+              value={data.onExhaust}
+              options={["return_empty", "raise"]}
+              onChange={(v) => onPatch({ onExhaust: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Checkbox
+            label="include_reasoning (append reasoning_content to reply)"
+            value={data.includeReasoning}
+            onChange={(v) =>
+              onPatch({ includeReasoning: v } as Partial<AnyNodeData>)
+            }
+          />
+          <Field label="backoff_base (s)">
+            <NumberInput
+              value={data.backoffBase}
+              min={0}
+              step={0.5}
+              onChange={(v) => onPatch({ backoffBase: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Field label="backoff_max (s)">
+            <NumberInput
+              value={data.backoffMax}
+              min={0}
+              onChange={(v) => onPatch({ backoffMax: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <Field label="jitter (s, 0 = off)">
+            <NumberInput
+              value={data.jitter}
+              min={0}
+              step={0.1}
+              onChange={(v) => onPatch({ jitter: v } as Partial<AnyNodeData>)}
+            />
+          </Field>
+          <div className="text-[10.5px] leading-snug text-slate-500 -mt-1">
+            These configure the generated{" "}
+            <code className="font-mono">OpenAICompatChatClient</code> (retry
+            with jittered exponential backoff). A Processor in LLM mode picks
+            up whatever it references here. Only non-default values are written
+            to the exported code.
+          </div>
         </>
       )}
 
